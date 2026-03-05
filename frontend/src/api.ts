@@ -44,10 +44,6 @@ export class ApiClient {
         localStorage.setItem('csrf_token', token);
     }
 
-    private getCsrfToken(): string | null {
-        return this.csrfToken;
-    }
-
     private async fetch(endpoint: string, options: RequestInit = {}): Promise<any> {
         const url = `${API_BASE_URL}${endpoint}`;
         const headers: Record<string, string> = {
