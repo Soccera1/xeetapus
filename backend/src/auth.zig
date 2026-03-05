@@ -83,20 +83,17 @@ pub fn register(allocator: std.mem.Allocator, req: *http.Request, res: *http.Res
     // Generate secure signed token
     const cfg = try config.Config.get();
     const token = try security.generateSignedToken(allocator, cfg.jwt_secret, user_id, TOKEN_EXPIRATION_SECONDS);
-    defer allocator.free(token);
 
     // Generate CSRF token
     const session_id = try security.generateSecureTokenAlloc(allocator);
     defer allocator.free(session_id);
     const csrf_token = try security.tokens.generateCsrfToken(allocator, cfg.csrf_secret, session_id);
-    defer allocator.free(csrf_token);
 
     // Set HTTP-only cookie with auth token
     const cookie_secure = if (cfg.cookie_secure) "; Secure" else "";
     const cookie_str = try std.fmt.allocPrint(allocator, "auth_token={s}; HttpOnly{s}; SameSite=Strict; Path=/; Max-Age={d}", .{
         token, cookie_secure, TOKEN_EXPIRATION_SECONDS,
     });
-    defer allocator.free(cookie_str);
     res.headers.put("Set-Cookie", cookie_str) catch {};
 
     // Log successful registration
@@ -109,8 +106,11 @@ pub fn register(allocator: std.mem.Allocator, req: *http.Request, res: *http.Res
     const escaped_email = try json_utils.escapeJson(allocator, body.email);
     defer allocator.free(escaped_email);
     const escaped_csrf = try json_utils.escapeJson(allocator, csrf_token);
-    defer allocator.free(escaped_csrf);
     try res.body.writer().print("{{\"id\":{d},\"username\":\"{s}\",\"email\":\"{s}\",\"token\":\"{s}\",\"csrf_token\":\"{s}\"}}", .{ user_id, escaped_username, escaped_email, token, escaped_csrf });
+    allocator.free(escaped_csrf);
+    allocator.free(csrf_token);
+    // Note: cookie_str and token are stored in response headers and must not be freed here
+    // They will be freed when the response is deallocated
 }
 
 pub fn login(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response) !void {
@@ -160,20 +160,17 @@ pub fn login(allocator: std.mem.Allocator, req: *http.Request, res: *http.Respon
     // Generate secure signed token
     const cfg = try config.Config.get();
     const token = try security.generateSignedToken(allocator, cfg.jwt_secret, user.id, TOKEN_EXPIRATION_SECONDS);
-    defer allocator.free(token);
 
     // Generate CSRF token
     const session_id = try security.generateSecureTokenAlloc(allocator);
     defer allocator.free(session_id);
     const csrf_token = try security.tokens.generateCsrfToken(allocator, cfg.csrf_secret, session_id);
-    defer allocator.free(csrf_token);
 
     // Set HTTP-only cookie with token
     const cookie_secure = if (cfg.cookie_secure) "; Secure" else "";
     const cookie_str = try std.fmt.allocPrint(allocator, "auth_token={s}; HttpOnly{s}; SameSite=Strict; Path=/; Max-Age={d}", .{
         token, cookie_secure, TOKEN_EXPIRATION_SECONDS,
     });
-    defer allocator.free(cookie_str);
     res.headers.put("Set-Cookie", cookie_str) catch {};
 
     // Log successful login
@@ -185,8 +182,10 @@ pub fn login(allocator: std.mem.Allocator, req: *http.Request, res: *http.Respon
     const escaped_email2 = try json_utils.escapeJson(allocator, user.email);
     defer allocator.free(escaped_email2);
     const escaped_csrf = try json_utils.escapeJson(allocator, csrf_token);
-    defer allocator.free(escaped_csrf);
     try res.body.writer().print("{{\"id\":{d},\"username\":\"{s}\",\"email\":\"{s}\",\"token\":\"{s}\",\"csrf_token\":\"{s}\"}}", .{ user.id, escaped_username2, escaped_email2, token, escaped_csrf });
+    allocator.free(escaped_csrf);
+    allocator.free(csrf_token);
+    // Note: cookie_str and token are stored in response headers and must not be freed here
 }
 
 pub fn logout(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response) !void {

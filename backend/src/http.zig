@@ -286,7 +286,9 @@ pub const Server = struct {
             res.headers.put("Content-Type", "text/plain") catch {};
             res.body.appendSlice("Request entity too large") catch {};
             res.addSecurityHeaders(self.is_production);
-            res.send(connection.stream, null) catch {};
+            res.send(connection.stream, null) catch |err| {
+                std.log.debug("Failed to send 413 response: {s}", .{@errorName(err)});
+            };
             return;
         }
 
@@ -308,7 +310,9 @@ pub const Server = struct {
         // Handle CORS preflight
         if (std.mem.eql(u8, req.method, "OPTIONS")) {
             res.status = 204;
-            res.send(connection.stream, origin) catch {};
+            res.send(connection.stream, origin) catch |err| {
+                std.log.debug("Failed to send CORS preflight: {s}", .{@errorName(err)});
+            };
             return;
         }
 
@@ -320,7 +324,9 @@ pub const Server = struct {
         const allowed = self.rate_limiter.check(rate_key) catch {
             res.status = 500;
             res.body.appendSlice("Rate limiter error") catch {};
-            res.send(connection.stream, origin) catch {};
+            res.send(connection.stream, origin) catch |err| {
+                std.log.debug("Failed to send rate limiter error: {s}", .{@errorName(err)});
+            };
             return;
         };
 
@@ -335,7 +341,9 @@ pub const Server = struct {
             res.headers.put("X-RateLimit-Reset", std.fmt.bufPrint(&reset_buf, "{d}", .{status.reset_time}) catch "0") catch {};
             res.headers.put("Retry-After", std.fmt.bufPrint(&retry_buf, "{d}", .{status.reset_time - std.time.timestamp()}) catch "60") catch {};
             res.body.appendSlice("{\"error\":\"Rate limit exceeded\"}") catch {};
-            res.send(connection.stream, origin) catch {};
+            res.send(connection.stream, origin) catch |err| {
+                std.log.debug("Failed to send rate limit response: {s}", .{@errorName(err)});
+            };
             return;
         }
 
@@ -403,7 +411,9 @@ pub const Server = struct {
             res.body.appendSlice(error_response) catch {};
         }
 
-        res.send(connection.stream, origin) catch {};
+        res.send(connection.stream, origin) catch |err| {
+            std.log.debug("Failed to send response: {s}", .{@errorName(err)});
+        };
     }
 
     fn parseRequest(self: *Server, data: []const u8, remote_addr: net.Address) !Request {

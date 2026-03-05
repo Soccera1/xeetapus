@@ -50,7 +50,9 @@ pub fn hashPassword(allocator: std.mem.Allocator, password: []const u8) ![]u8 {
     const salt_b64_len = std.base64.standard.Encoder.calcSize(salt.len);
     const hash_b64_len = std.base64.standard.Encoder.calcSize(hash.len);
 
-    const result = try allocator.alloc(u8, 16 + 2 + 2 + salt_b64_len + 1 + hash_b64_len);
+    // Calculate max size needed: $pbkdf2-sha256$ + cost(2) + $ + salt_b64 + $ + hash_b64
+    const max_result_len = 16 + 2 + 1 + salt_b64_len + 1 + hash_b64_len;
+    const result = try allocator.alloc(u8, max_result_len);
     errdefer allocator.free(result);
 
     var stream = std.io.fixedBufferStream(result);
@@ -68,11 +70,19 @@ pub fn hashPassword(allocator: std.mem.Allocator, password: []const u8) ![]u8 {
     const hash_b64 = std.base64.standard.Encoder.encode(&hash_b64_buf, &hash);
     try writer.writeAll(hash_b64);
 
-    return result;
+    // Return only the portion that was actually written
+    return allocator.realloc(result, stream.pos);
 }
 
 /// Verify password against stored hash
+/// Supports both new format ($pbkdf2-sha256$cost$salt$hash) and legacy format (hex SHA256)
 pub fn verifyPassword(allocator: std.mem.Allocator, password: []const u8, stored_hash: []const u8) !bool {
+    // Check if this is a legacy hash (doesn't start with $)
+    if (stored_hash.len > 0 and stored_hash[0] != '$') {
+        // Legacy hash format: simple SHA256 hex string
+        return verifyLegacyPassword(password, stored_hash);
+    }
+
     // Parse the stored hash
     var parts = std.mem.splitScalar(u8, stored_hash, '$');
     _ = parts.next(); // empty before first $
@@ -119,4 +129,30 @@ pub fn verifyPassword(allocator: std.mem.Allocator, password: []const u8, stored
 
     // Constant-time comparison
     return crypto.utils.timingSafeEql([HASH_LEN]u8, computed_hash, expected_hash[0..HASH_LEN].*);
+}
+
+/// Verify password against legacy hash format (simple SHA256 hex)
+fn verifyLegacyPassword(password: []const u8, stored_hash: []const u8) bool {
+    // Legacy hashes are 64 hex characters representing 32 bytes
+    if (stored_hash.len != 64) {
+        return false;
+    }
+
+    // Decode the stored hex hash
+    var expected_hash: [HASH_LEN]u8 = undefined;
+    var i: usize = 0;
+    while (i < 64) : (i += 2) {
+        const high = std.fmt.charToDigit(stored_hash[i], 16) catch return false;
+        const low = std.fmt.charToDigit(stored_hash[i + 1], 16) catch return false;
+        expected_hash[i / 2] = @intCast(high * 16 + low);
+    }
+
+    // Compute SHA256 of password
+    var computed_hash: [HASH_LEN]u8 = undefined;
+    var hasher = crypto.hash.sha2.Sha256.init(.{});
+    hasher.update(password);
+    hasher.final(&computed_hash);
+
+    // Constant-time comparison
+    return crypto.utils.timingSafeEql([HASH_LEN]u8, computed_hash, expected_hash);
 }

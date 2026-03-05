@@ -46,7 +46,7 @@ build: build-backend build-frontend
 # Run the backend only
 run-backend: build-backend
     @echo "🚀 Starting backend on port 8080..."
-    @cd backend && ./zig-out/bin/xeetapus-backend
+    @cd backend && env $(cat .env | grep -v '^#' | xargs) ./zig-out/bin/xeetapus-backend
 
 # Run the frontend only (Vite dev server)
 run-frontend:
@@ -59,7 +59,7 @@ run:
     @just stop 2>/dev/null || true
     @just build
     @echo "🚀 Starting services..."
-    @cd backend && ./zig-out/bin/xeetapus-backend &
+    @cd backend && env $(cat .env | grep -v '^#' | xargs) ./zig-out/bin/xeetapus-backend &
     @sleep 3
     @cd frontend && npx serve dist -p 3000 &
     @echo ""
@@ -76,7 +76,7 @@ dev:
     @just stop 2>/dev/null || true
     @just build-backend
     @echo "🚀 Starting services..."
-    @cd backend && ./zig-out/bin/xeetapus-backend &
+    @cd backend && env $(cat .env | grep -v '^#' | xargs) ./zig-out/bin/xeetapus-backend &
     @sleep 2
     @cd frontend && npm run dev &
     @echo ""
