@@ -4,27 +4,48 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
 export class ApiClient {
     private token: string | null = null;
+    private csrfToken: string | null = null;
 
     constructor() {
+        // Token is now stored in httpOnly cookie, so we don't load from localStorage
+        // But we keep this for backward compatibility during migration
         this.token = localStorage.getItem('token');
+        this.csrfToken = localStorage.getItem('csrf_token');
+        
+        // If there's a token in localStorage, migrate it by clearing it
+        if (this.token) {
+            localStorage.removeItem('token');
+            this.token = null;
+        }
     }
 
     setToken(token: string): void {
         this.token = token;
-        localStorage.setItem('token', token);
+        // Don't store token in localStorage anymore - it's in httpOnly cookie
     }
 
     clearToken(): void {
         this.token = null;
         localStorage.removeItem('token');
+        localStorage.removeItem('csrf_token');
     }
 
     isAuthenticated(): boolean {
-        return this.token !== null;
+        // Check cookie-based auth - we'll rely on the server to tell us
+        return true; // Optimistic - actual check happens on API calls
     }
 
     getToken(): string | null {
         return this.token;
+    }
+
+    setCsrfToken(token: string): void {
+        this.csrfToken = token;
+        localStorage.setItem('csrf_token', token);
+    }
+
+    private getCsrfToken(): string | null {
+        return this.csrfToken;
     }
 
     private async fetch(endpoint: string, options: RequestInit = {}): Promise<any> {
@@ -34,16 +55,35 @@ export class ApiClient {
             ...options.headers as Record<string, string>
         };
 
-        if (this.token) {
-            headers['Authorization'] = `Bearer ${this.token}`;
+        // Add CSRF token for state-changing operations
+        const method = options.method || 'GET';
+        if (method !== 'GET' && method !== 'HEAD' && this.csrfToken) {
+            headers['X-CSRF-Token'] = this.csrfToken;
         }
 
+        // Include credentials to send cookies
         const response = await fetch(url, {
             ...options,
-            headers
+            headers,
+            credentials: 'include', // Important: send cookies with requests
         });
 
         if (!response.ok) {
+            if (response.status === 401) {
+                // Clear auth state on 401
+                this.clearToken();
+                // Optionally redirect to login
+                window.dispatchEvent(new CustomEvent('auth:unauthorized'));
+            }
+            
+            if (response.status === 429) {
+                const retryAfter = response.headers.get('Retry-After');
+                const error: any = new Error('Rate limit exceeded. Please try again later.');
+                error.retryAfter = retryAfter;
+                error.status = 429;
+                throw error;
+            }
+            
             const error = await response.json().catch(() => ({ error: 'Unknown error' }));
             throw new Error(error.error || `HTTP ${response.status}`);
         }
@@ -60,7 +100,12 @@ export class ApiClient {
             method: 'POST',
             body: JSON.stringify(data)
         });
-        this.setToken(response.token);
+        if (response.token) {
+            this.setToken(response.token);
+        }
+        if (response.csrf_token) {
+            this.setCsrfToken(response.csrf_token);
+        }
         return response;
     }
 
@@ -69,16 +114,24 @@ export class ApiClient {
             method: 'POST',
             body: JSON.stringify(data)
         });
-        this.setToken(response.token);
+        if (response.token) {
+            this.setToken(response.token);
+        }
+        if (response.csrf_token) {
+            this.setCsrfToken(response.csrf_token);
+        }
         return response;
+    }
+
+    async logout(): Promise<void> {
+        await this.fetch('/auth/logout', {
+            method: 'POST'
+        });
+        this.clearToken();
     }
 
     async me(): Promise<User> {
         return this.fetch('/auth/me');
-    }
-
-    logout(): void {
-        this.clearToken();
     }
 
     async createPost(data: CreatePostRequest): Promise<{ id: number; content: string; created: boolean }> {

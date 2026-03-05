@@ -16,33 +16,46 @@ const blocks = @import("blocks.zig");
 const drafts = @import("drafts.zig");
 const scheduled = @import("scheduled.zig");
 const analytics = @import("analytics.zig");
+const config = @import("config.zig");
+const audit = @import("audit.zig");
 
-const PUBLIC_DIR = "../frontend/public";
+const PUBLIC_DIR = "../frontend/dist";
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
+    // Initialize configuration from environment
+    try config.Config.init(allocator);
+    defer config.Config.deinit(allocator);
+
+    const cfg = try config.Config.get();
+
     // Initialize database
-    try db.init("xeetapus.db");
+    try db.init(cfg.database_path);
     defer db.deinit();
 
     // Run migrations
     try db.runMigrations();
 
+    // Initialize audit logging
+    try audit.init("audit.log");
+    defer audit.deinit();
+
     // Start HTTP server
-    var server = try http.Server.init(allocator, 8080);
+    var server = try http.Server.init(allocator, cfg.server_port);
     defer server.deinit();
 
     // Register API routes
-    try server.addRoute("POST", "/api/auth/register", auth.register);
-    try server.addRoute("POST", "/api/auth/login", auth.login);
+    try server.addPublicRoute("POST", "/api/auth/register", auth.register);
+    try server.addPublicRoute("POST", "/api/auth/login", auth.login);
+    try server.addRoute("POST", "/api/auth/logout", auth.logout);
     try server.addRoute("GET", "/api/auth/me", auth.me);
 
     try server.addRoute("POST", "/api/posts", posts.create);
-    try server.addRoute("GET", "/api/posts", posts.list);
-    try server.addRoute("GET", "/api/posts/:id", posts.get);
+    try server.addPublicRoute("GET", "/api/posts", posts.list);
+    try server.addPublicRoute("GET", "/api/posts/:id", posts.get);
     try server.addRoute("DELETE", "/api/posts/:id", posts.delete);
     try server.addRoute("POST", "/api/posts/:id/like", posts.like);
     try server.addRoute("DELETE", "/api/posts/:id/like", posts.unlike);
@@ -51,42 +64,42 @@ pub fn main() !void {
     try server.addRoute("POST", "/api/posts/:id/bookmark", posts.bookmark);
     try server.addRoute("DELETE", "/api/posts/:id/bookmark", posts.unbookmark);
     try server.addRoute("POST", "/api/posts/:id/comment", posts.comment);
-    try server.addRoute("GET", "/api/posts/:id/comments", posts.getComments);
+    try server.addPublicRoute("GET", "/api/posts/:id/comments", posts.getComments);
     try server.addRoute("POST", "/api/posts/:id/pin", posts.pinPost);
     try server.addRoute("DELETE", "/api/posts/:id/pin", posts.unpinPost);
     try server.addRoute("POST", "/api/posts/:id/view", posts.recordView);
 
-    try server.addRoute("GET", "/api/users/:username", users.getProfile);
-    try server.addRoute("GET", "/api/users/:username/posts", users.getPosts);
+    try server.addPublicRoute("GET", "/api/users/:username", users.getProfile);
+    try server.addPublicRoute("GET", "/api/users/:username/posts", users.getPosts);
     try server.addRoute("POST", "/api/users/:username/follow", users.follow);
     try server.addRoute("DELETE", "/api/users/:username/follow", users.unfollow);
-    try server.addRoute("GET", "/api/users/:username/followers", users.getFollowers);
-    try server.addRoute("GET", "/api/users/:username/following", users.getFollowing);
+    try server.addPublicRoute("GET", "/api/users/:username/followers", users.getFollowers);
+    try server.addPublicRoute("GET", "/api/users/:username/following", users.getFollowing);
     try server.addRoute("POST", "/api/users/:username/block", blocks.blockUser);
     try server.addRoute("DELETE", "/api/users/:username/block", blocks.unblockUser);
     try server.addRoute("POST", "/api/users/:username/mute", blocks.muteUser);
     try server.addRoute("DELETE", "/api/users/:username/mute", blocks.unmuteUser);
 
     try server.addRoute("GET", "/api/timeline", timeline.getTimeline);
-    try server.addRoute("GET", "/api/timeline/explore", timeline.getExplore);
+    try server.addPublicRoute("GET", "/api/timeline/explore", timeline.getExplore);
 
     try server.addRoute("GET", "/api/notifications", notifications.list);
     try server.addRoute("POST", "/api/notifications/:id/read", notifications.markAsRead);
     try server.addRoute("POST", "/api/notifications/read-all", notifications.markAllAsRead);
     try server.addRoute("GET", "/api/notifications/unread-count", notifications.getUnreadCount);
 
-    try server.addRoute("GET", "/api/search/users", search.searchUsers);
-    try server.addRoute("GET", "/api/search/posts", search.searchPosts);
+    try server.addPublicRoute("GET", "/api/search/users", search.searchUsers);
+    try server.addPublicRoute("GET", "/api/search/posts", search.searchPosts);
 
     // Community routes
-    try server.addRoute("GET", "/api/communities", communities.list);
+    try server.addPublicRoute("GET", "/api/communities", communities.list);
     try server.addRoute("POST", "/api/communities", communities.create);
-    try server.addRoute("GET", "/api/communities/:id", communities.get);
+    try server.addPublicRoute("GET", "/api/communities/:id", communities.get);
     try server.addRoute("POST", "/api/communities/:id/join", communities.join);
     try server.addRoute("DELETE", "/api/communities/:id/join", communities.leave);
-    try server.addRoute("GET", "/api/communities/:id/posts", communities.getPosts);
+    try server.addPublicRoute("GET", "/api/communities/:id/posts", communities.getPosts);
     try server.addRoute("POST", "/api/communities/:id/posts", communities.createPost);
-    try server.addRoute("GET", "/api/communities/:id/members", communities.getMembers);
+    try server.addPublicRoute("GET", "/api/communities/:id/members", communities.getMembers);
 
     // Direct Messages routes
     try server.addRoute("GET", "/api/messages/conversations", messages.getConversations);
@@ -105,12 +118,12 @@ pub fn main() !void {
     try server.addRoute("GET", "/api/lists/:id/timeline", lists.getListTimeline);
 
     // Hashtags routes
-    try server.addRoute("GET", "/api/hashtags/trending", hashtags.getTrending);
-    try server.addRoute("GET", "/api/hashtags/:tag/posts", hashtags.getPostsByHashtag);
+    try server.addPublicRoute("GET", "/api/hashtags/trending", hashtags.getTrending);
+    try server.addPublicRoute("GET", "/api/hashtags/:tag/posts", hashtags.getPostsByHashtag);
 
     // Polls routes
     try server.addRoute("POST", "/api/polls/:id/vote", polls.vote);
-    try server.addRoute("GET", "/api/polls/:id/results", polls.getPollResults);
+    try server.addPublicRoute("GET", "/api/polls/:id/results", polls.getPollResults);
 
     // Blocks/Mutes routes
     try server.addRoute("GET", "/api/blocks", blocks.getBlockedUsers);
@@ -131,12 +144,12 @@ pub fn main() !void {
     try server.addRoute("GET", "/api/analytics/posts/:id/views", analytics.getPostViews);
     try server.addRoute("GET", "/api/analytics/me", analytics.getUserAnalytics);
 
-    try server.addRoute("GET", "/api/health", healthCheck);
+    try server.addPublicRoute("GET", "/api/health", healthCheck);
 
     // Register static file handler for all other routes
-    try server.addRoute("GET", "/", serveStaticFiles);
+    try server.addPublicRoute("GET", "/", serveStaticFiles);
 
-    std.log.info("Xeetapus server starting on port 8080...", .{});
+    std.log.info("Xeetapus server starting on port {d}...", .{cfg.server_port});
     try server.start();
 }
 
@@ -146,10 +159,23 @@ fn healthCheck(_: std.mem.Allocator, _: *http.Request, res: *http.Response) !voi
 }
 
 fn serveStaticFiles(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response) !void {
-    // Remove leading slash
+    // Remove leading slash and get safe path
     const path = if (req.path.len > 1) req.path[1..] else "index.html";
 
-    // Build full file path
+    // SECURITY: Prevent path traversal attacks
+    // Check for path traversal sequences
+    if (std.mem.indexOf(u8, path, "..") != null or
+        std.mem.indexOf(u8, path, "~") != null or
+        std.mem.startsWith(u8, path, "/") or
+        std.mem.indexOf(u8, path, "\\") != null)
+    {
+        res.status = 403;
+        res.headers.put("Content-Type", "text/plain") catch {};
+        try res.body.appendSlice("Forbidden");
+        return;
+    }
+
+    // Build full file path with canonicalization
     const full_path = std.fs.path.join(allocator, &[_][]const u8{ PUBLIC_DIR, path }) catch {
         res.status = 500;
         res.headers.put("Content-Type", "text/plain") catch {};
@@ -158,33 +184,41 @@ fn serveStaticFiles(allocator: std.mem.Allocator, req: *http.Request, res: *http
     };
     defer allocator.free(full_path);
 
-    // Try to open the file
-    const file = std.fs.cwd().openFile(full_path, .{}) catch |err| {
-        // If file not found, serve index.html (SPA fallback)
+    // Resolve to absolute path and verify it's within PUBLIC_DIR
+    const abs_path = std.fs.cwd().realpathAlloc(allocator, full_path) catch |err| {
         if (err == std.fs.File.OpenError.FileNotFound) {
-            const index_path = std.fs.path.join(allocator, &[_][]const u8{ PUBLIC_DIR, "index.html" }) catch {
-                res.status = 500;
-                return;
-            };
-            defer allocator.free(index_path);
+            // Try serving index.html for SPA routing
+            return serveIndexHtml(allocator, res);
+        }
+        res.status = 500;
+        res.headers.put("Content-Type", "text/plain") catch {};
+        try res.body.appendSlice("Internal Server Error");
+        return;
+    };
+    defer allocator.free(abs_path);
 
-            const index_file = std.fs.cwd().openFile(index_path, .{}) catch {
-                res.status = 404;
-                res.headers.put("Content-Type", "text/plain") catch {};
-                try res.body.appendSlice("Not Found");
-                return;
-            };
-            defer index_file.close();
+    const public_dir_abs = std.fs.cwd().realpathAlloc(allocator, PUBLIC_DIR) catch {
+        res.status = 500;
+        res.headers.put("Content-Type", "text/plain") catch {};
+        try res.body.appendSlice("Internal Server Error");
+        return;
+    };
+    defer allocator.free(public_dir_abs);
 
-            const content = index_file.readToEndAlloc(allocator, 1024 * 1024) catch {
-                res.status = 500;
-                return;
-            };
-            defer allocator.free(content);
+    // Ensure the resolved path is within the public directory
+    if (!std.mem.startsWith(u8, abs_path, public_dir_abs)) {
+        res.status = 403;
+        res.headers.put("Content-Type", "text/plain") catch {};
+        try res.body.appendSlice("Forbidden");
+        return;
+    }
 
-            res.headers.put("Content-Type", "text/html") catch {};
-            try res.body.appendSlice(content);
-            return;
+    // Try to open the file
+    const file = std.fs.cwd().openFile(abs_path, .{}) catch |err| {
+        if (err == std.fs.File.OpenError.FileNotFound or
+            err == std.fs.File.OpenError.IsDir)
+        {
+            return serveIndexHtml(allocator, res);
         }
 
         res.status = 404;
@@ -194,29 +228,74 @@ fn serveStaticFiles(allocator: std.mem.Allocator, req: *http.Request, res: *http
     };
     defer file.close();
 
+    // Get file metadata for size check
+    const stat = file.stat() catch {
+        res.status = 500;
+        return;
+    };
+
+    // Limit file size to 10MB
+    const MAX_FILE_SIZE = 10 * 1024 * 1024;
+    if (stat.size > MAX_FILE_SIZE) {
+        res.status = 413;
+        res.headers.put("Content-Type", "text/plain") catch {};
+        try res.body.appendSlice("File too large");
+        return;
+    }
+
     // Read file content
-    const content = file.readToEndAlloc(allocator, 1024 * 1024) catch {
+    const content = file.readToEndAlloc(allocator, MAX_FILE_SIZE) catch {
         res.status = 500;
         return;
     };
     defer allocator.free(content);
 
     // Set content type based on file extension
-    const content_type = if (std.mem.endsWith(u8, path, ".html"))
-        "text/html"
-    else if (std.mem.endsWith(u8, path, ".css"))
-        "text/css"
-    else if (std.mem.endsWith(u8, path, ".js"))
-        "application/javascript"
-    else if (std.mem.endsWith(u8, path, ".json"))
-        "application/json"
-    else if (std.mem.endsWith(u8, path, ".png"))
-        "image/png"
-    else if (std.mem.endsWith(u8, path, ".jpg") or std.mem.endsWith(u8, path, ".jpeg"))
-        "image/jpeg"
-    else
-        "text/plain";
+    const content_type = getContentType(path);
 
     res.headers.put("Content-Type", content_type) catch {};
     try res.body.appendSlice(content);
+}
+
+fn serveIndexHtml(allocator: std.mem.Allocator, res: *http.Response) !void {
+    const index_path = std.fs.path.join(allocator, &[_][]const u8{ PUBLIC_DIR, "index.html" }) catch {
+        res.status = 500;
+        return;
+    };
+    defer allocator.free(index_path);
+
+    const index_file = std.fs.cwd().openFile(index_path, .{}) catch {
+        res.status = 404;
+        res.headers.put("Content-Type", "text/plain") catch {};
+        try res.body.appendSlice("Not Found");
+        return;
+    };
+    defer index_file.close();
+
+    const content = index_file.readToEndAlloc(allocator, 1024 * 1024) catch {
+        res.status = 500;
+        return;
+    };
+    defer allocator.free(content);
+
+    res.headers.put("Content-Type", "text/html") catch {};
+    try res.body.appendSlice(content);
+}
+
+fn getContentType(path: []const u8) []const u8 {
+    const ext = std.fs.path.extension(path);
+    if (std.mem.eql(u8, ext, ".html")) return "text/html";
+    if (std.mem.eql(u8, ext, ".css")) return "text/css";
+    if (std.mem.eql(u8, ext, ".js")) return "application/javascript";
+    if (std.mem.eql(u8, ext, ".json")) return "application/json";
+    if (std.mem.eql(u8, ext, ".png")) return "image/png";
+    if (std.mem.eql(u8, ext, ".jpg") or std.mem.eql(u8, ext, ".jpeg")) return "image/jpeg";
+    if (std.mem.eql(u8, ext, ".gif")) return "image/gif";
+    if (std.mem.eql(u8, ext, ".svg")) return "image/svg+xml";
+    if (std.mem.eql(u8, ext, ".ico")) return "image/x-icon";
+    if (std.mem.eql(u8, ext, ".woff")) return "font/woff";
+    if (std.mem.eql(u8, ext, ".woff2")) return "font/woff2";
+    if (std.mem.eql(u8, ext, ".ttf")) return "font/ttf";
+    if (std.mem.eql(u8, ext, ".eot")) return "application/vnd.ms-fontobject";
+    return "application/octet-stream";
 }

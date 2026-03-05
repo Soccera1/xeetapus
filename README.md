@@ -1,10 +1,10 @@
 # Xeetapus
 
-A fully functional clone of X (Twitter) built with Zig backend and React frontend.
+A fully functional clone of X (Twitter) built with Zig backend and React frontend. Now production-ready with comprehensive security features.
 
 ## Features
 
-- **User Authentication**: Register, login, and logout
+- **User Authentication**: Secure register, login, and logout with JWT tokens
 - **Posts (Xeets)**: Create, delete, and view posts (280 character limit)
 - **Timeline**: View posts from users you follow
 - **Explore**: Discover popular posts
@@ -27,14 +27,32 @@ A fully functional clone of X (Twitter) built with Zig backend and React fronten
 - **Analytics**: View post engagement statistics
 - **Pinned Posts**: Pin important posts to your profile
 
+## Security Features
+
+Xeetapus implements comprehensive security measures following OWASP guidelines:
+
+- **Secure Authentication**: PBKDF2-inspired password hashing, JWT with HMAC-SHA256, httpOnly cookies
+- **Session Management**: Secure cookie-based sessions with SameSite=Strict protection
+- **Rate Limiting**: Configurable rate limits (default: 100 req/min) with proper headers
+- **CSRF Protection**: CSRF tokens for all state-changing operations
+- **CORS Security**: Whitelist-based CORS (no wildcards)
+- **Security Headers**: CSP, HSTS, X-Frame-Options, X-Content-Type-Options, and more
+- **Input Validation**: Username, email, and password validation; XSS sanitization
+- **Path Traversal Protection**: Canonical path validation
+- **Request Limits**: Configurable request size limits (default: 1MB)
+- **Audit Logging**: Security event tracking
+- **SQL Injection Prevention**: Parameterized queries throughout
+
+See [SECURITY.md](SECURITY.md) for detailed security documentation.
+
 ## Tech Stack
 
 ### Backend (Zig)
-- Custom HTTP server
+- Custom HTTP server with security hardening
 - SQLite database with 20+ tables
-- RESTful API
-- CORS support
-- Port: 8080
+- RESTful API with comprehensive security
+- Environment-based configuration
+- Port: 8080 (configurable)
 
 ### Frontend (React + TypeScript)
 - React 18 with hooks
@@ -52,9 +70,16 @@ xeetapus/
 ├── backend/
 │   ├── src/
 │   │   ├── main.zig           # Entry point & route registration
-│   │   ├── http.zig           # HTTP server implementation
+│   │   ├── http.zig           # HTTP server with security headers
+│   │   ├── config.zig         # Environment configuration
 │   │   ├── db.zig             # Database module & migrations
-│   │   ├── auth.zig           # Authentication handlers
+│   │   ├── auth.zig           # Authentication with secure tokens
+│   │   ├── security.zig       # Security module exports
+│   │   ├── password.zig       # Secure password hashing
+│   │   ├── tokens.zig         # JWT token generation/verification
+│   │   ├── ratelimit.zig      # Rate limiting implementation
+│   │   ├── validation.zig     # Input validation
+│   │   ├── audit.zig          # Security audit logging
 │   │   ├── posts.zig          # Post handlers
 │   │   ├── users.zig          # User handlers
 │   │   ├── timeline.zig       # Timeline handlers
@@ -72,20 +97,24 @@ xeetapus/
 │   │   ├── json.zig           # JSON utilities
 │   │   └── routes.zig         # Route utilities
 │   ├── build.zig              # Zig build configuration
+│   ├── .env.example           # Environment variables template
 │   └── xeetapus.db            # SQLite database
 ├── frontend/
 │   ├── src/                   # React source code
 │   ├── dist/                  # Built files (production)
 │   ├── package.json           # Node dependencies
-│   └── vite.config.ts         # Vite configuration
+│   ├── vite.config.ts         # Vite configuration
+│   └── .env.example           # Environment variables template
 ├── justfile                   # Task runner commands
+├── SECURITY.md                # Security documentation
+├── SECURITY_HARDENING.md      # Security implementation summary
 ├── LICENSE                    # AGPL3+ License
 └── README.md
 ```
 
 ## Prerequisites
 
-- Zig 0.11.0 or later
+- Zig 0.14.0 or later
 - SQLite3 (development library)
 - Node.js 18+ and npm
 - A C compiler (for Zig SQLite bindings)
@@ -93,8 +122,32 @@ xeetapus/
 
 ## Installation
 
-### Using Just (Recommended)
+### 1. Clone and Setup
 
+```bash
+git clone <repository-url>
+cd xeetapus
+```
+
+### 2. Configure Environment
+
+**Backend:**
+```bash
+cd backend
+cp .env.example .env
+# Edit .env with your configuration (see Configuration section)
+```
+
+**Frontend:**
+```bash
+cd frontend
+cp .env.example .env
+# Edit .env with your API URL
+```
+
+### 3. Build
+
+**Using Just (Recommended):**
 ```bash
 # Install Just first: https://github.com/casey/just
 
@@ -106,7 +159,7 @@ just build-backend
 just build-frontend
 ```
 
-### Manual Installation
+**Manual Installation:**
 
 **Backend:**
 ```bash
@@ -119,6 +172,53 @@ zig build
 cd frontend
 npm install
 npm run build
+```
+
+## Configuration
+
+### Required Environment Variables
+
+Create a `.env` file in the `backend/` directory:
+
+```bash
+# Required: Generate with: openssl rand -base64 64
+XEETAPUS_JWT_SECRET=your-64-character-secret-here
+
+# Required: Generate with: openssl rand -base64 32
+XEETAPUS_CSRF_SECRET=your-32-character-secret-here
+```
+
+### Optional Environment Variables
+
+```bash
+# Environment (development/staging/production)
+XEETAPUS_ENV=development
+
+# Server port
+XEETAPUS_PORT=8080
+
+# Database path
+XEETAPUS_DB_PATH=xeetapus.db
+
+# CORS allowed origins (comma-separated)
+XEETAPUS_ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173
+
+# Password hashing cost (default: 12, higher = more secure but slower)
+XEETAPUS_BCRYPT_COST=12
+
+# Maximum request size in bytes (default: 1MB)
+XEETAPUS_MAX_REQUEST_SIZE=1048576
+
+# Rate limiting
+XEETAPUS_RATE_LIMIT_REQUESTS=100
+XEETAPUS_RATE_LIMIT_WINDOW=60
+```
+
+### Frontend Configuration
+
+```bash
+# API URL
+VITE_API_URL=http://localhost:8080/api
 ```
 
 ## Running the Application
@@ -168,11 +268,62 @@ npm run build
 # Serves static files from backend on port 8080
 ```
 
+## Production Deployment
+
+### Pre-Deployment Checklist
+
+1. **Set Strong Secrets:**
+   ```bash
+   # Generate secrets
+   openssl rand -base64 64  # JWT_SECRET
+   openssl rand -base64 32  # CSRF_SECRET
+   ```
+
+2. **Environment Configuration:**
+   ```bash
+   XEETAPUS_ENV=production
+   XEETAPUS_ALLOWED_ORIGINS=https://yourdomain.com
+   XEETAPUS_JWT_SECRET=<strong-secret>
+   XEETAPUS_CSRF_SECRET=<strong-secret>
+   ```
+
+3. **Enable HTTPS:**
+   - Use a valid SSL certificate
+   - Set up reverse proxy (nginx, Caddy, or Traefik)
+   - Configure HSTS headers
+
+4. **Database Security:**
+   ```bash
+   chmod 600 /path/to/xeetapus.db
+   ```
+
+5. **File Permissions:**
+   ```bash
+   # Ensure proper ownership
+   chown -R www-data:www-data /path/to/xeetapus
+   ```
+
+### Docker Deployment (Example)
+
+```dockerfile
+# Dockerfile
+FROM alpine:latest
+RUN apk add --no-cache sqlite-dev
+COPY backend/zig-out/bin/xeetapus-backend /app/
+COPY frontend/dist /app/public
+WORKDIR /app
+ENV XEETAPUS_ENV=production
+ENV XEETAPUS_PORT=8080
+EXPOSE 8080
+CMD ["./xeetapus-backend"]
+```
+
 ## API Endpoints
 
 ### Authentication
 - `POST /api/auth/register` - Register a new user
 - `POST /api/auth/login` - Login
+- `POST /api/auth/logout` - Logout (clears cookies)
 - `GET /api/auth/me` - Get current user
 
 ### Posts
@@ -278,7 +429,7 @@ npm run build
 
 The application uses SQLite with the following tables:
 
-- **users** - User accounts with profile info
+- **users** - User accounts with profile info and secure password hashes
 - **posts** - User posts (xeets) with optional media
 - **likes** - Post likes
 - **follows** - User follow relationships
@@ -333,21 +484,109 @@ npm run preview        # Preview production build
 npm run test           # Run tests
 ```
 
-## Security Notes
+### Code Style
 
-This is a demo application. For production use:
+- **Zig**: Follow official Zig style guide
+- **TypeScript/React**: Use ESLint and Prettier configurations
+- **Security**: Run security scans before commits
 
-1. Use proper JWT authentication with secure secrets
-2. Implement rate limiting on all endpoints
-3. Use HTTPS/TLS for all connections
-4. Sanitize user inputs to prevent XSS
-5. Use bcrypt or Argon2 for password hashing
-6. Add CSRF protection
-7. Implement proper CORS policies
-8. Add input validation and SQL injection prevention
-9. Use prepared statements for all database queries
-10. Implement request logging and monitoring
+## Security
+
+Xeetapus has been hardened for production use with comprehensive security measures. Key highlights:
+
+- ✅ No hardcoded secrets
+- ✅ Secure password hashing (PBKDF2-inspired)
+- ✅ JWT with HMAC-SHA256 signatures
+- ✅ httpOnly cookies with SameSite protection
+- ✅ CSRF protection
+- ✅ Rate limiting
+- ✅ CORS whitelist
+- ✅ Security headers (CSP, HSTS, etc.)
+- ✅ Input validation and sanitization
+- ✅ Path traversal protection
+- ✅ SQL injection prevention
+- ✅ Audit logging
+
+For complete security documentation, see [SECURITY.md](SECURITY.md).
+
+For implementation details, see [SECURITY_HARDENING.md](SECURITY_HARDENING.md).
+
+## Testing Security
+
+Verify security features:
+
+```bash
+# 1. Test rate limiting (101st request should return 429)
+for i in {1..101}; do
+  curl -s http://localhost:8080/api/health > /dev/null
+done
+
+# 2. Test path traversal (should return 403)
+curl http://localhost:8080/../../../etc/passwd
+
+# 3. Check security headers
+curl -I http://localhost:8080/api/health
+
+# 4. Test with weak password (should fail)
+curl -X POST http://localhost:8080/api/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"username":"test","email":"test@test.com","password":"123"}'
+```
+
+## Troubleshooting
+
+### Build Issues
+
+**Backend:**
+```bash
+# Clean build
+rm -rf backend/.zig-cache backend/zig-out
+zig build
+
+# Check Zig version
+zig version  # Should be 0.14.0+
+```
+
+**Frontend:**
+```bash
+# Clean install
+rm -rf frontend/node_modules frontend/package-lock.json
+cd frontend && npm install
+```
+
+### Runtime Issues
+
+**Database:**
+- Ensure SQLite3 is installed
+- Check database file permissions
+- Verify database path in configuration
+
+**Environment:**
+- Verify all required environment variables are set
+- Check `.env` file exists in backend directory
+- Ensure JWT_SECRET is at least 32 characters
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Run tests
+5. Submit a pull request
 
 ## License
 
 AGPL3+ - See LICENSE file for details
+
+## Acknowledgments
+
+- Built with [Zig](https://ziglang.org/)
+- Frontend powered by [React](https://reactjs.org/)
+- UI components from [Radix UI](https://www.radix-ui.com/)
+- Icons from [Lucide](https://lucide.dev/)
+
+## Support
+
+For issues and feature requests, please use the GitHub issue tracker.
+
+For security issues, please see [SECURITY.md](SECURITY.md) for responsible disclosure guidelines.

@@ -2,9 +2,12 @@ const std = @import("std");
 const http = @import("http.zig");
 const db = @import("db.zig");
 const json_utils = @import("json.zig");
-const crypto = @import("std").crypto;
+const security = @import("security.zig");
+const config = @import("config.zig");
+const audit = @import("audit.zig");
 
-const JWT_SECRET = "xeetapus-secret-key-change-in-production";
+// Token expiration: 24 hours
+const TOKEN_EXPIRATION_SECONDS = 86400;
 
 pub const User = struct {
     id: i64,
@@ -33,23 +36,32 @@ pub fn register(allocator: std.mem.Allocator, req: *http.Request, res: *http.Res
 
     const body = parsed.value;
 
-    // Validate input
-    if (body.username.len < 3 or body.username.len > 30) {
+    // Validate username
+    if (security.validation.validateUsername(body.username)) |err_msg| {
         res.status = 400;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Username must be between 3 and 30 characters\"}");
+        try res.body.writer().print("{{\"error\":\"{s}\"}}", .{err_msg});
         return;
     }
 
-    if (body.password.len < 6) {
+    // Validate password
+    if (security.validation.validatePassword(body.password)) |err_msg| {
         res.status = 400;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Password must be at least 6 characters\"}");
+        try res.body.writer().print("{{\"error\":\"{s}\"}}", .{err_msg});
         return;
     }
 
-    // Hash password
-    const password_hash = try hashPassword(allocator, body.password);
+    // Validate email
+    if (security.validation.validateEmail(body.email)) |err_msg| {
+        res.status = 400;
+        res.headers.put("Content-Type", "application/json") catch {};
+        try res.body.writer().print("{{\"error\":\"{s}\"}}", .{err_msg});
+        return;
+    }
+
+    // Hash password using secure PBKDF2
+    const password_hash = try security.hashPassword(allocator, body.password);
     defer allocator.free(password_hash);
 
     // Insert user
@@ -68,9 +80,27 @@ pub fn register(allocator: std.mem.Allocator, req: *http.Request, res: *http.Res
 
     const user_id = db.lastInsertRowId();
 
-    // Generate token
-    const token = try generateToken(allocator, user_id);
+    // Generate secure signed token
+    const cfg = try config.Config.get();
+    const token = try security.generateSignedToken(allocator, cfg.jwt_secret, user_id, TOKEN_EXPIRATION_SECONDS);
     defer allocator.free(token);
+
+    // Generate CSRF token
+    const session_id = try security.generateSecureTokenAlloc(allocator);
+    defer allocator.free(session_id);
+    const csrf_token = try security.tokens.generateCsrfToken(allocator, cfg.csrf_secret, session_id);
+    defer allocator.free(csrf_token);
+
+    // Set HTTP-only cookie with auth token
+    const cookie_secure = if (cfg.cookie_secure) "; Secure" else "";
+    const cookie_str = try std.fmt.allocPrint(allocator, "auth_token={s}; HttpOnly{s}; SameSite=Strict; Path=/; Max-Age={d}", .{
+        token, cookie_secure, TOKEN_EXPIRATION_SECONDS,
+    });
+    defer allocator.free(cookie_str);
+    res.headers.put("Set-Cookie", cookie_str) catch {};
+
+    // Log successful registration
+    audit.logAuth(allocator, "register", user_id, req, true);
 
     res.status = 201;
     res.headers.put("Content-Type", "application/json") catch {};
@@ -78,7 +108,9 @@ pub fn register(allocator: std.mem.Allocator, req: *http.Request, res: *http.Res
     defer allocator.free(escaped_username);
     const escaped_email = try json_utils.escapeJson(allocator, body.email);
     defer allocator.free(escaped_email);
-    try res.body.writer().print("{{\"id\":{d},\"username\":\"{s}\",\"email\":\"{s}\",\"token\":\"{s}\"}}", .{ user_id, escaped_username, escaped_email, token });
+    const escaped_csrf = try json_utils.escapeJson(allocator, csrf_token);
+    defer allocator.free(escaped_csrf);
+    try res.body.writer().print("{{\"id\":{d},\"username\":\"{s}\",\"email\":\"{s}\",\"token\":\"{s}\",\"csrf_token\":\"{s}\"}}", .{ user_id, escaped_username, escaped_email, token, escaped_csrf });
 }
 
 pub fn login(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response) !void {
@@ -105,6 +137,8 @@ pub fn login(allocator: std.mem.Allocator, req: *http.Request, res: *http.Respon
     defer db.freeRows(UserWithPassword, allocator, rows);
 
     if (rows.len == 0) {
+        // Log failed login attempt
+        audit.logAuth(allocator, "login", null, req, false);
         res.status = 401;
         res.headers.put("Content-Type", "application/json") catch {};
         try res.body.appendSlice("{\"error\":\"Invalid credentials\"}");
@@ -114,23 +148,59 @@ pub fn login(allocator: std.mem.Allocator, req: *http.Request, res: *http.Respon
     const user = rows[0];
 
     // Verify password
-    if (!try verifyPassword(allocator, body.password, user.password_hash)) {
+    if (!try security.verifyPassword(allocator, body.password, user.password_hash)) {
+        // Log failed login attempt
+        audit.logAuth(allocator, "login", user.id, req, false);
         res.status = 401;
         res.headers.put("Content-Type", "application/json") catch {};
         try res.body.appendSlice("{\"error\":\"Invalid credentials\"}");
         return;
     }
 
-    // Generate token
-    const token = try generateToken(allocator, user.id);
+    // Generate secure signed token
+    const cfg = try config.Config.get();
+    const token = try security.generateSignedToken(allocator, cfg.jwt_secret, user.id, TOKEN_EXPIRATION_SECONDS);
     defer allocator.free(token);
+
+    // Generate CSRF token
+    const session_id = try security.generateSecureTokenAlloc(allocator);
+    defer allocator.free(session_id);
+    const csrf_token = try security.tokens.generateCsrfToken(allocator, cfg.csrf_secret, session_id);
+    defer allocator.free(csrf_token);
+
+    // Set HTTP-only cookie with token
+    const cookie_secure = if (cfg.cookie_secure) "; Secure" else "";
+    const cookie_str = try std.fmt.allocPrint(allocator, "auth_token={s}; HttpOnly{s}; SameSite=Strict; Path=/; Max-Age={d}", .{
+        token, cookie_secure, TOKEN_EXPIRATION_SECONDS,
+    });
+    defer allocator.free(cookie_str);
+    res.headers.put("Set-Cookie", cookie_str) catch {};
+
+    // Log successful login
+    audit.logAuth(allocator, "login", user.id, req, true);
 
     res.headers.put("Content-Type", "application/json") catch {};
     const escaped_username2 = try json_utils.escapeJson(allocator, user.username);
     defer allocator.free(escaped_username2);
     const escaped_email2 = try json_utils.escapeJson(allocator, user.email);
     defer allocator.free(escaped_email2);
-    try res.body.writer().print("{{\"id\":{d},\"username\":\"{s}\",\"email\":\"{s}\",\"token\":\"{s}\"}}", .{ user.id, escaped_username2, escaped_email2, token });
+    const escaped_csrf = try json_utils.escapeJson(allocator, csrf_token);
+    defer allocator.free(escaped_csrf);
+    try res.body.writer().print("{{\"id\":{d},\"username\":\"{s}\",\"email\":\"{s}\",\"token\":\"{s}\",\"csrf_token\":\"{s}\"}}", .{ user.id, escaped_username2, escaped_email2, token, escaped_csrf });
+}
+
+pub fn logout(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response) !void {
+    // Get user ID before clearing cookie
+    const user_id = try getUserIdFromRequest(allocator, req);
+
+    // Clear the auth cookie
+    res.headers.put("Set-Cookie", "auth_token=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0") catch {};
+    res.headers.put("Content-Type", "application/json") catch {};
+
+    // Log logout
+    audit.logAuth(allocator, "logout", user_id, req, true);
+
+    try res.body.appendSlice("{\"message\":\"Logged out successfully\"}");
 }
 
 pub fn me(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response) !void {
@@ -172,32 +242,21 @@ pub fn me(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response)
     try res.body.writer().print("{{\"id\":{d},\"username\":\"{s}\",\"email\":\"{s}\",\"display_name\":\"{s}\",\"bio\":\"{s}\",\"avatar_url\":\"{s}\",\"created_at\":\"{s}\"}}", .{ user.id, escaped_username3, escaped_email3, escaped_display_name, escaped_bio, escaped_avatar_url, escaped_created_at });
 }
 
-fn hashPassword(allocator: std.mem.Allocator, password: []const u8) ![]u8 {
-    // Simple bcrypt-like hashing using SHA256 for demo
-    var hash: [32]u8 = undefined;
-    var hasher = crypto.hash.sha2.Sha256.init(.{});
-    hasher.update(password);
-    hasher.update("xeetapus-salt");
-    hasher.final(&hash);
+pub fn getUserIdFromRequest(allocator: std.mem.Allocator, req: *http.Request) !?i64 {
+    // First try to get token from cookie (more secure)
+    if (req.headers.get("Cookie")) |cookie_header| {
+        var it = std.mem.splitScalar(u8, cookie_header, ';');
+        while (it.next()) |cookie| {
+            const trimmed = std.mem.trim(u8, cookie, " ");
+            if (std.mem.startsWith(u8, trimmed, "auth_token=")) {
+                const token = trimmed[11..]; // Skip "auth_token="
+                const cfg = try config.Config.get();
+                return try security.verifySignedToken(allocator, cfg.jwt_secret, token);
+            }
+        }
+    }
 
-    const hex_hash = try allocator.alloc(u8, 64);
-    _ = try std.fmt.bufPrint(hex_hash, "{s}", .{std.fmt.fmtSliceHexLower(&hash)});
-    return hex_hash;
-}
-
-fn verifyPassword(allocator: std.mem.Allocator, password: []const u8, hash: []const u8) !bool {
-    const computed = try hashPassword(allocator, password);
-    defer allocator.free(computed);
-    return std.mem.eql(u8, computed, hash);
-}
-
-fn generateToken(allocator: std.mem.Allocator, user_id: i64) ![]u8 {
-    // Simple token generation
-    const token = try std.fmt.allocPrint(allocator, "token_{d}_{d}", .{ user_id, std.time.timestamp() });
-    return token;
-}
-
-pub fn getUserIdFromRequest(_: std.mem.Allocator, req: *http.Request) !?i64 {
+    // Fallback to Authorization header
     const auth_header = req.headers.get("Authorization") orelse return null;
 
     if (!std.mem.startsWith(u8, auth_header, "Bearer ")) {
@@ -206,14 +265,7 @@ pub fn getUserIdFromRequest(_: std.mem.Allocator, req: *http.Request) !?i64 {
 
     const token = auth_header[7..];
 
-    // Simple token parsing (in production, use proper JWT)
-    if (std.mem.startsWith(u8, token, "token_")) {
-        var parts = std.mem.splitScalar(u8, token, '_');
-        _ = parts.next(); // skip "token"
-        if (parts.next()) |user_id_str| {
-            return try std.fmt.parseInt(i64, user_id_str, 10);
-        }
-    }
-
-    return null;
+    // Verify signed token
+    const cfg = try config.Config.get();
+    return try security.verifySignedToken(allocator, cfg.jwt_secret, token);
 }
