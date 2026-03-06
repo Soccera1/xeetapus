@@ -3,6 +3,7 @@ const std = @import("std");
 pub const Config = struct {
     jwt_secret: []const u8,
     database_path: []const u8,
+    media_path: []const u8,
     server_port: u16,
     allowed_origins: []const []const u8,
     bcrypt_cost: u6,
@@ -31,6 +32,12 @@ pub const Config = struct {
             break :blk default_path;
         };
         errdefer allocator.free(db_path);
+
+        const media_path = std.process.getEnvVarOwned(allocator, "XEETAPUS_MEDIA_PATH") catch blk: {
+            const default_path = try allocator.dupe(u8, "/var/www/xeetapus/media");
+            break :blk default_path;
+        };
+        errdefer allocator.free(media_path);
 
         const port_str = std.process.getEnvVarOwned(allocator, "XEETAPUS_PORT") catch null;
         const port = if (port_str) |s| blk: {
@@ -103,6 +110,7 @@ pub const Config = struct {
         instance = Config{
             .jwt_secret = jwt_secret,
             .database_path = db_path,
+            .media_path = media_path,
             .server_port = port,
             .allowed_origins = try origins_list.toOwnedSlice(),
             .bcrypt_cost = bcrypt_cost,
@@ -146,6 +154,7 @@ pub const Config = struct {
         if (instance) |*cfg| {
             allocator.free(cfg.jwt_secret);
             allocator.free(cfg.database_path);
+            allocator.free(cfg.media_path);
             allocator.free(cfg.environment);
             allocator.free(cfg.csrf_secret);
             for (cfg.allowed_origins) |origin| {

@@ -2,8 +2,8 @@ const std = @import("std");
 const http = @import("http.zig");
 const auth = @import("auth.zig");
 const db = @import("db.zig");
+const config = @import("config.zig");
 
-const MEDIA_DIR = "../database/media";
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB max file size
 
 // Allowed file extensions and their corresponding MIME types
@@ -20,6 +20,8 @@ const ALLOWED_EXTENSIONS = .{
 };
 
 pub fn upload(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response) !void {
+    const cfg = try config.Config.get();
+
     // Get user ID from request
     const user_id = try auth.getUserIdFromRequest(allocator, req) orelse {
         res.status = 401;
@@ -90,7 +92,7 @@ pub fn upload(allocator: std.mem.Allocator, req: *http.Request, res: *http.Respo
     }
 
     // Create user directory if it doesn't exist
-    const user_dir = try std.fs.path.join(allocator, &[_][]const u8{ MEDIA_DIR, username });
+    const user_dir = try std.fs.path.join(allocator, &[_][]const u8{ cfg.media_path, username });
     defer allocator.free(user_dir);
 
     std.fs.cwd().makePath(user_dir) catch |err| {
@@ -252,31 +254,28 @@ fn parseMultipartForm(allocator: std.mem.Allocator, body: []const u8, boundary: 
     return result;
 }
 
-// Serve media files from the database/media directory
+// Serve media files from the media directory
 pub fn serveMedia(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response) !void {
-    // Extract username and filename from path
-    // Path format: /media/:username/:filename
-    const path = req.path;
-    const prefix = "/media/";
+    const cfg = try config.Config.get();
 
-    if (!std.mem.startsWith(u8, path, prefix)) {
+    // Get the path from wildcard route params
+    // Path format: username/filename (without /media/ prefix)
+    const path_param = req.params.get("path") orelse {
         res.status = 400;
         res.headers.put("Content-Type", "application/json") catch {};
         try res.body.appendSlice("{\"error\":\"Invalid path\"}");
         return;
-    }
+    };
 
-    const remaining = path[prefix.len..];
-    const slash_idx = std.mem.indexOf(u8, remaining, "/");
-    if (slash_idx == null) {
+    const slash_idx = std.mem.indexOf(u8, path_param, "/") orelse {
         res.status = 400;
         res.headers.put("Content-Type", "application/json") catch {};
         try res.body.appendSlice("{\"error\":\"Invalid path\"}");
         return;
-    }
+    };
 
-    const username = remaining[0..slash_idx.?];
-    const filename = remaining[slash_idx.? + 1 ..];
+    const username = path_param[0..slash_idx];
+    const filename = path_param[slash_idx + 1 ..];
 
     // SECURITY: Validate path components
     if (std.mem.indexOf(u8, username, "..") != null or
@@ -293,7 +292,7 @@ pub fn serveMedia(allocator: std.mem.Allocator, req: *http.Request, res: *http.R
     }
 
     // Build file path
-    const file_path = try std.fs.path.join(allocator, &[_][]const u8{ MEDIA_DIR, username, filename });
+    const file_path = try std.fs.path.join(allocator, &[_][]const u8{ cfg.media_path, username, filename });
     defer allocator.free(file_path);
 
     // Open and serve file
