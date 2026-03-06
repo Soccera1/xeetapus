@@ -182,6 +182,14 @@ export class ApiClient {
         return this.fetch(`/users/${username}/posts`);
     }
 
+    async getUserReplies(username: string): Promise<Post[]> {
+        return this.fetch(`/users/${username}/replies`);
+    }
+
+    async getUserMediaPosts(username: string): Promise<Post[]> {
+        return this.fetch(`/users/${username}/media`);
+    }
+
     async followUser(username: string): Promise<{ following: boolean }> {
         return this.fetch(`/users/${username}/follow`, {
             method: 'POST'
@@ -494,6 +502,38 @@ export class ApiClient {
 
     async getUserAnalytics(): Promise<UserAnalytics> {
         return this.fetch('/analytics/me');
+    }
+
+    async updateProfile(data: { display_name?: string; bio?: string; avatar_url?: string }): Promise<{ updated: boolean }> {
+        return this.fetch('/users/me', {
+            method: 'PUT',
+            body: JSON.stringify(data)
+        });
+    }
+
+    async uploadMedia(file: File, isProfile = false): Promise<{ url: string; filename: string }> {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('is_profile', isProfile ? 'true' : 'false');
+
+        const url = `${API_BASE_URL}/media/upload`;
+        const response = await fetch(url, {
+            method: 'POST',
+            body: formData,
+            credentials: 'include',
+            headers: this.csrfToken ? { 'X-CSRF-Token': this.csrfToken } : undefined
+        });
+
+        if (!response.ok) {
+            if (response.status === 401) {
+                this.clearToken();
+                window.dispatchEvent(new CustomEvent('auth:unauthorized'));
+            }
+            const error = await response.json().catch(() => ({ error: 'Unknown error' }));
+            throw new Error(error.error || `HTTP ${response.status}`);
+        }
+
+        return response.json();
     }
 }
 

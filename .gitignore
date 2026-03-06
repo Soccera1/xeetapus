@@ -17,6 +17,7 @@ backend/build/
 database/*.db
 database/*.sqlite
 database/*.sqlite3
+database/media/
 *.db
 *.sqlite
 *.sqlite3

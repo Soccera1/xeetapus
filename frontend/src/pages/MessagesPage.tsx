@@ -1,18 +1,23 @@
 import { useState, useEffect } from 'react';
 import { api } from '../api';
+import { useAuth } from '../context/AuthContext';
 import type { Conversation, Message } from '../types';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
-import { Send, MessageCircle } from 'lucide-react';
+import { Send, MessageCircle, Image, X } from 'lucide-react';
 
 export function MessagesPage() {
+    const { user } = useAuth();
     const [conversations, setConversations] = useState<Conversation[]>([]);
     const [selectedConversation, setSelectedConversation] = useState<number | null>(null);
     const [messages, setMessages] = useState<Message[]>([]);
     const [newMessage, setNewMessage] = useState('');
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
+    const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+    const [mediaPreview, setMediaPreview] = useState<string[]>([]);
+    const [isSending, setIsSending] = useState(false);
 
     useEffect(() => {
         loadConversations();
@@ -44,16 +49,54 @@ export function MessagesPage() {
         }
     };
 
+    const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const files = Array.from(e.target.files || []);
+        if (files.length + selectedFiles.length > 4) {
+            setError('You can only upload up to 4 images/videos');
+            return;
+        }
+
+        setSelectedFiles(prev => [...prev, ...files]);
+
+        // Create previews
+        files.forEach(file => {
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                setMediaPreview(prev => [...prev, reader.result as string]);
+            };
+            reader.readAsDataURL(file);
+        });
+    };
+
+    const removeMedia = (index: number) => {
+        setSelectedFiles(prev => prev.filter((_, i) => i !== index));
+        setMediaPreview(prev => prev.filter((_, i) => i !== index));
+    };
+
     const sendMessage = async () => {
-        if (!selectedConversation || !newMessage.trim()) return;
+        if (!selectedConversation || (!newMessage.trim() && selectedFiles.length === 0)) return;
         
+        setIsSending(true);
         try {
-            await api.sendMessage(selectedConversation, newMessage);
+            // Upload media first if there are files
+            let mediaUrls: string | undefined;
+            if (selectedFiles.length > 0) {
+                const uploadResults = await Promise.all(
+                    selectedFiles.map(file => api.uploadMedia(file, false))
+                );
+                mediaUrls = uploadResults.map(result => result.url).join(',');
+            }
+
+            await api.sendMessage(selectedConversation, newMessage, mediaUrls);
             setNewMessage('');
+            setSelectedFiles([]);
+            setMediaPreview([]);
             loadMessages(selectedConversation);
             loadConversations();
         } catch (err) {
             setError('Failed to send message');
+        } finally {
+            setIsSending(false);
         }
     };
 
@@ -127,35 +170,103 @@ export function MessagesPage() {
                                             No messages yet
                                         </p>
                                     ) : (
-                                        messages.map((msg) => (
-                                            <div
-                                                key={msg.id}
-                                                className={`p-3 rounded-lg ${
-                                                    msg.sender_id === 1
-                                                        ? 'bg-primary text-primary-foreground ml-auto'
-                                                        : 'bg-muted'
-                                                } max-w-[80%]`}
-                                            >
-                                                <p className="text-sm font-medium mb-1">
-                                                    {msg.sender_display_name || msg.sender_username}
-                                                </p>
-                                                <p>{msg.content}</p>
-                                                <p className="text-xs opacity-70 mt-1">
-                                                    {new Date(msg.created_at).toLocaleString()}
-                                                </p>
-                                            </div>
-                                        ))
+                                        messages.map((msg) => {
+                                            const mediaUrls = msg.media_urls ? msg.media_urls.split(',').filter(url => url.trim()) : [];
+                                            return (
+                                                <div
+                                                    key={msg.id}
+                                                    className={`p-3 rounded-lg ${
+                                                        user && msg.sender_id === user.id
+                                                            ? 'bg-primary text-primary-foreground ml-auto'
+                                                            : 'bg-muted'
+                                                    } max-w-[80%]`}
+                                                >
+                                                    <p className="text-sm font-medium mb-1">
+                                                        {msg.sender_display_name || msg.sender_username}
+                                                    </p>
+                                                    <p>{msg.content}</p>
+                                                    {mediaUrls.length > 0 && (
+                                                        <div className={`grid gap-2 mt-2 ${mediaUrls.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                                                            {mediaUrls.map((url, idx) => (
+                                                                <div key={idx} className="relative rounded-lg overflow-hidden bg-muted">
+                                                                    {url.match(/\.(jpg|jpeg|png|gif|webp)$/i) ? (
+                                                                        <img
+                                                                            src={url}
+                                                                            alt={`Media ${idx + 1}`}
+                                                                            className="w-full h-auto max-h-48 object-cover"
+                                                                            loading="lazy"
+                                                                        />
+                                                                    ) : url.match(/\.(mp4|webm|mov)$/i) ? (
+                                                                        <video
+                                                                            src={url}
+                                                                            controls
+                                                                            className="w-full h-auto max-h-48"
+                                                                        />
+                                                                    ) : (
+                                                                        <div className="flex items-center gap-2 p-2">
+                                                                            <Image className="h-4 w-4" />
+                                                                            <a href={url} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline text-sm">
+                                                                                View media
+                                                                            </a>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                    <p className="text-xs opacity-70 mt-1">
+                                                        {new Date(msg.created_at).toLocaleString()}
+                                                    </p>
+                                                </div>
+                                            );
+                                        })
                                     )}
                                 </div>
                                 
+                                {mediaPreview.length > 0 && (
+                                    <div className="grid grid-cols-4 gap-2 mb-3">
+                                        {mediaPreview.map((preview, idx) => (
+                                            <div key={idx} className="relative">
+                                                <img
+                                                    src={preview}
+                                                    alt={`Preview ${idx + 1}`}
+                                                    className="w-full h-20 object-cover rounded-lg"
+                                                />
+                                                <button
+                                                    onClick={() => removeMedia(idx)}
+                                                    className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600"
+                                                >
+                                                    <X className="w-3 h-3" />
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
                                 <div className="flex gap-2">
+                                    <input
+                                        type="file"
+                                        accept="image/*,video/*"
+                                        multiple
+                                        onChange={handleFileSelect}
+                                        className="hidden"
+                                        id="message-media-input"
+                                    />
+                                    <Button
+                                        variant="outline"
+                                        size="icon"
+                                        onClick={() => document.getElementById('message-media-input')?.click()}
+                                        disabled={isSending}
+                                    >
+                                        <Image className="w-4 h-4" />
+                                    </Button>
                                     <Input
                                         value={newMessage}
                                         onChange={(e) => setNewMessage(e.target.value)}
                                         placeholder="Type a message..."
                                         onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
+                                        disabled={isSending}
                                     />
-                                    <Button onClick={sendMessage} size="icon">
+                                    <Button onClick={sendMessage} size="icon" disabled={isSending || (!newMessage.trim() && selectedFiles.length === 0)}>
                                         <Send className="w-4 h-4" />
                                     </Button>
                                 </div>

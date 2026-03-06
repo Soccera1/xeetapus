@@ -441,3 +441,229 @@ pub fn getFollowing(allocator: std.mem.Allocator, req: *http.Request, res: *http
 
     try res.body.appendSlice("]");
 }
+
+pub fn getReplies(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response) !void {
+    const current_user_id = auth.getUserIdFromRequest(allocator, req) catch null;
+
+    // Extract username from path
+    const path_parts = std.mem.splitScalar(u8, req.path, '/');
+    var username: ?[]const u8 = null;
+
+    var i: usize = 0;
+    var iter = path_parts;
+    while (iter.next()) |part| {
+        if (i == 3) {
+            username = part;
+            break;
+        }
+        i += 1;
+    }
+
+    if (username == null) {
+        res.status = 400;
+        res.headers.put("Content-Type", "application/json") catch {};
+        try res.body.appendSlice("{\"error\":\"Username required\"}");
+        return;
+    }
+
+    const sql =
+        \\SELECT p.id, p.user_id, u.username, u.display_name, u.avatar_url,
+        \\       p.content, p.media_urls, p.reply_to_id, p.created_at,
+        \\       (SELECT COUNT(*) FROM likes WHERE post_id = p.id) as likes_count,
+        \\       (SELECT COUNT(*) FROM comments WHERE post_id = p.id) as comments_count,
+        \\       CASE WHEN ? THEN (SELECT COUNT(*) FROM likes WHERE post_id = p.id AND user_id = ?) > 0 ELSE 0 END as is_liked
+        \\FROM posts p
+        \\JOIN users u ON p.user_id = u.id
+        \\WHERE u.username = ? AND p.reply_to_id IS NOT NULL
+        \\ORDER BY p.created_at DESC
+        \\LIMIT 50
+    ;
+
+    const ReplyPost = struct {
+        id: i64,
+        user_id: i64,
+        username: []const u8,
+        display_name: []const u8,
+        avatar_url: []const u8,
+        content: []const u8,
+        media_urls: ?[]const u8,
+        reply_to_id: ?i64,
+        created_at: []const u8,
+        likes_count: i64,
+        comments_count: i64,
+        is_liked: bool,
+    };
+
+    const current_user_str = if (current_user_id) |id| try std.fmt.allocPrint(allocator, "{d}", .{id}) else "";
+    defer if (current_user_id != null) allocator.free(current_user_str);
+    const has_user = if (current_user_id != null) "1" else "0";
+
+    const params = [_][]const u8{ has_user, current_user_str, username.? };
+
+    const rows = db.query(ReplyPost, allocator, sql, &params) catch {
+        res.status = 500;
+        res.headers.put("Content-Type", "application/json") catch {};
+        try res.body.appendSlice("{\"error\":\"Failed to fetch replies\"}");
+        return;
+    };
+    defer db.freeRows(ReplyPost, allocator, rows);
+
+    res.headers.put("Content-Type", "application/json") catch {};
+    try res.body.appendSlice("[");
+
+    for (rows, 0..) |post, idx| {
+        if (idx > 0) try res.body.appendSlice(",");
+        const escaped_content = try json_utils.escapeJson(allocator, post.content);
+        defer allocator.free(escaped_content);
+        const escaped_username = try json_utils.escapeJson(allocator, post.username);
+        defer allocator.free(escaped_username);
+        const escaped_display_name = try json_utils.escapeJson(allocator, post.display_name);
+        defer allocator.free(escaped_display_name);
+        const escaped_created_at = try json_utils.escapeJson(allocator, post.created_at);
+        defer allocator.free(escaped_created_at);
+        try res.body.writer().print("{{\"id\":{d},\"user_id\":{d},\"username\":\"{s}\",\"display_name\":\"{s}\",\"content\":\"{s}\",\"created_at\":\"{s}\",\"likes_count\":{d},\"comments_count\":{d},\"is_liked\":{s}}}", .{ post.id, post.user_id, escaped_username, escaped_display_name, escaped_content, escaped_created_at, post.likes_count, post.comments_count, if (post.is_liked) "true" else "false" });
+    }
+
+    try res.body.appendSlice("]");
+}
+
+pub fn getMediaPosts(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response) !void {
+    const current_user_id = auth.getUserIdFromRequest(allocator, req) catch null;
+
+    // Extract username from path
+    const path_parts = std.mem.splitScalar(u8, req.path, '/');
+    var username: ?[]const u8 = null;
+
+    var i: usize = 0;
+    var iter = path_parts;
+    while (iter.next()) |part| {
+        if (i == 3) {
+            username = part;
+            break;
+        }
+        i += 1;
+    }
+
+    if (username == null) {
+        res.status = 400;
+        res.headers.put("Content-Type", "application/json") catch {};
+        try res.body.appendSlice("{\"error\":\"Username required\"}");
+        return;
+    }
+
+    const sql =
+        \\SELECT p.id, p.user_id, u.username, u.display_name, u.avatar_url,
+        \\       p.content, p.media_urls, p.reply_to_id, p.created_at,
+        \\       (SELECT COUNT(*) FROM likes WHERE post_id = p.id) as likes_count,
+        \\       (SELECT COUNT(*) FROM comments WHERE post_id = p.id) as comments_count,
+        \\       CASE WHEN ? THEN (SELECT COUNT(*) FROM likes WHERE post_id = p.id AND user_id = ?) > 0 ELSE 0 END as is_liked
+        \\FROM posts p
+        \\JOIN users u ON p.user_id = u.id
+        \\WHERE u.username = ? AND p.media_urls IS NOT NULL AND p.media_urls != ''
+        \\ORDER BY p.created_at DESC
+        \\LIMIT 50
+    ;
+
+    const MediaPost = struct {
+        id: i64,
+        user_id: i64,
+        username: []const u8,
+        display_name: []const u8,
+        avatar_url: []const u8,
+        content: []const u8,
+        media_urls: ?[]const u8,
+        reply_to_id: ?i64,
+        created_at: []const u8,
+        likes_count: i64,
+        comments_count: i64,
+        is_liked: bool,
+    };
+
+    const current_user_str = if (current_user_id) |id| try std.fmt.allocPrint(allocator, "{d}", .{id}) else "";
+    defer if (current_user_id != null) allocator.free(current_user_str);
+    const has_user = if (current_user_id != null) "1" else "0";
+
+    const params = [_][]const u8{ has_user, current_user_str, username.? };
+
+    const rows = db.query(MediaPost, allocator, sql, &params) catch {
+        res.status = 500;
+        res.headers.put("Content-Type", "application/json") catch {};
+        try res.body.appendSlice("{\"error\":\"Failed to fetch media posts\"}");
+        return;
+    };
+    defer db.freeRows(MediaPost, allocator, rows);
+
+    res.headers.put("Content-Type", "application/json") catch {};
+    try res.body.appendSlice("[");
+
+    for (rows, 0..) |post, idx| {
+        if (idx > 0) try res.body.appendSlice(",");
+        const escaped_content = try json_utils.escapeJson(allocator, post.content);
+        defer allocator.free(escaped_content);
+        const escaped_username = try json_utils.escapeJson(allocator, post.username);
+        defer allocator.free(escaped_username);
+        const escaped_display_name = try json_utils.escapeJson(allocator, post.display_name);
+        defer allocator.free(escaped_display_name);
+        const escaped_created_at = try json_utils.escapeJson(allocator, post.created_at);
+        defer allocator.free(escaped_created_at);
+        const escaped_media_urls = try json_utils.escapeJson(allocator, post.media_urls orelse "");
+        defer allocator.free(escaped_media_urls);
+        try res.body.writer().print("{{\"id\":{d},\"user_id\":{d},\"username\":\"{s}\",\"display_name\":\"{s}\",\"content\":\"{s}\",\"media_urls\":\"{s}\",\"created_at\":\"{s}\",\"likes_count\":{d},\"comments_count\":{d},\"is_liked\":{s}}}", .{ post.id, post.user_id, escaped_username, escaped_display_name, escaped_content, escaped_media_urls, escaped_created_at, post.likes_count, post.comments_count, if (post.is_liked) "true" else "false" });
+    }
+
+    try res.body.appendSlice("]");
+}
+
+pub fn updateProfile(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response) !void {
+    const user_id = try auth.getUserIdFromRequest(allocator, req) orelse {
+        res.status = 401;
+        res.headers.put("Content-Type", "application/json") catch {};
+        try res.body.appendSlice("{\"error\":\"Unauthorized\"}");
+        return;
+    };
+
+    const UpdateRequest = struct {
+        display_name: ?[]const u8 = null,
+        bio: ?[]const u8 = null,
+        avatar_url: ?[]const u8 = null,
+    };
+
+    const parsed = try std.json.parseFromSlice(UpdateRequest, allocator, req.body, .{});
+    defer parsed.deinit();
+
+    const body = parsed.value;
+
+    // Validate bio length (max 160 characters)
+    if (body.bio) |bio| {
+        if (bio.len > 160) {
+            res.status = 400;
+            res.headers.put("Content-Type", "application/json") catch {};
+            try res.body.appendSlice("{\"error\":\"Bio must be 160 characters or less\"}");
+            return;
+        }
+    }
+
+    // Validate display_name length (max 50 characters)
+    if (body.display_name) |name| {
+        if (name.len > 50) {
+            res.status = 400;
+            res.headers.put("Content-Type", "application/json") catch {};
+            try res.body.appendSlice("{\"error\":\"Display name must be 50 characters or less\"}");
+            return;
+        }
+    }
+
+    const sql = "UPDATE users SET display_name = COALESCE(?, display_name), bio = COALESCE(?, bio), avatar_url = COALESCE(?, avatar_url) WHERE id = ?";
+    const user_id_str = try std.fmt.allocPrint(allocator, "{d}", .{user_id});
+    defer allocator.free(user_id_str);
+
+    db.execute(sql, &[_][]const u8{ body.display_name orelse "", body.bio orelse "", body.avatar_url orelse "", user_id_str }) catch {
+        res.status = 500;
+        res.headers.put("Content-Type", "application/json") catch {};
+        try res.body.appendSlice("{\"error\":\"Failed to update profile\"}");
+        return;
+    };
+
+    res.headers.put("Content-Type", "application/json") catch {};
+    try res.body.appendSlice("{\"updated\":true}");
+}

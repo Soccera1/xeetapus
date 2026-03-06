@@ -16,6 +16,7 @@ const blocks = @import("blocks.zig");
 const drafts = @import("drafts.zig");
 const scheduled = @import("scheduled.zig");
 const analytics = @import("analytics.zig");
+const media = @import("media.zig");
 const config = @import("config.zig");
 const audit = @import("audit.zig");
 
@@ -71,6 +72,8 @@ pub fn main() !void {
 
     try server.addPublicRoute("GET", "/api/users/:username", users.getProfile);
     try server.addPublicRoute("GET", "/api/users/:username/posts", users.getPosts);
+    try server.addPublicRoute("GET", "/api/users/:username/replies", users.getReplies);
+    try server.addPublicRoute("GET", "/api/users/:username/media", users.getMediaPosts);
     try server.addRoute("POST", "/api/users/:username/follow", users.follow);
     try server.addRoute("DELETE", "/api/users/:username/follow", users.unfollow);
     try server.addPublicRoute("GET", "/api/users/:username/followers", users.getFollowers);
@@ -79,6 +82,7 @@ pub fn main() !void {
     try server.addRoute("DELETE", "/api/users/:username/block", blocks.unblockUser);
     try server.addRoute("POST", "/api/users/:username/mute", blocks.muteUser);
     try server.addRoute("DELETE", "/api/users/:username/mute", blocks.unmuteUser);
+    try server.addRoute("PUT", "/api/users/me", users.updateProfile);
 
     try server.addRoute("GET", "/api/timeline", timeline.getTimeline);
     try server.addPublicRoute("GET", "/api/timeline/explore", timeline.getExplore);
@@ -143,6 +147,10 @@ pub fn main() !void {
     // Analytics routes
     try server.addRoute("GET", "/api/analytics/posts/:id/views", analytics.getPostViews);
     try server.addRoute("GET", "/api/analytics/me", analytics.getUserAnalytics);
+
+    // Media routes
+    try server.addRoute("POST", "/api/media/upload", media.upload);
+    try server.addPublicRoute("GET", "/media", media.serveMedia);
 
     try server.addPublicRoute("GET", "/api/health", healthCheck);
 

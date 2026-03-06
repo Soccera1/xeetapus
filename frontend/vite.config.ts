@@ -17,6 +17,12 @@ export default defineConfig({
         changeOrigin: true,
         credentials: 'include', // Important: send cookies with requests
         secure: false, // Set to true in production with HTTPS
+      },
+      '/media': {
+        target: 'http://localhost:8080',
+        changeOrigin: true,
+        credentials: 'include',
+        secure: false,
       }
     },
     headers: {

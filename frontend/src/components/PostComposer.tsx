@@ -112,8 +112,10 @@ export function PostComposer({ onPostCreated, replyToId, replyToPost, quotePost 
             // Upload media first if there are files
             let mediaUrls: string | undefined;
             if (selectedFiles.length > 0) {
-                // For now, we'll simulate media URLs. In a real app, you'd upload to a CDN
-                mediaUrls = selectedFiles.map(() => `https://placeholder.com/media/${Date.now()}`).join(',');
+                const uploadResults = await Promise.all(
+                    selectedFiles.map(file => api.uploadMedia(file, false))
+                );
+                mediaUrls = uploadResults.map(result => result.url).join(',');
             }
 
             const request: Parameters<typeof api.createPost>[0] = {
@@ -290,7 +292,7 @@ export function PostComposer({ onPostCreated, replyToId, replyToPost, quotePost 
                                 <input
                                     id="media-upload"
                                     type="file"
-                                    accept="image/*,video/*"
+                                    accept="image/*,video/*,.svg"
                                     multiple
                                     className="hidden"
                                     onChange={handleFileSelect}
