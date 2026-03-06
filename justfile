@@ -11,7 +11,7 @@ default:
 # Clean build artifacts
 clean:
     @echo "🧹 Cleaning build artifacts..."
-    @cd backend && rm -rf zig-out zig-cache
+    @cd backend && rm -rf zig-out .zig-cache
     @cd frontend && rm -rf node_modules dist
     @echo "✅ Clean complete!"
 
