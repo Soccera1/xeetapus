@@ -19,6 +19,7 @@ const analytics = @import("analytics.zig");
 const media = @import("media.zig");
 const config = @import("config.zig");
 const audit = @import("audit.zig");
+const llm = @import("llm.zig");
 
 const PUBLIC_DIR = "./dist";
 
@@ -132,6 +133,14 @@ pub fn main() !void {
     // Blocks/Mutes routes
     try server.addRoute("GET", "/api/blocks", blocks.getBlockedUsers);
     try server.addRoute("GET", "/api/mutes", blocks.getMutedUsers);
+
+    // LLM routes
+    try server.addPublicRoute("GET", "/api/llm/providers", llm.getProviders);
+    try server.addRoute("GET", "/api/llm/configs", llm.getConfigs);
+    try server.addRoute("PUT", "/api/llm/configs/:provider", llm.updateConfig);
+    try server.addRoute("DELETE", "/api/llm/configs/:provider", llm.deleteConfig);
+    try server.addRoute("POST", "/api/llm/configs/:provider/reveal", llm.revealConfig);
+    try server.addRoute("POST", "/api/llm/chat", llm.chat);
 
     // Drafts routes
     try server.addRoute("GET", "/api/drafts", drafts.getDrafts);
