@@ -345,6 +345,21 @@ pub fn runMigrations() !void {
         \\    UNIQUE(user_id)
         \\);
         ,
+        // Per-user LLM provider settings
+        \\CREATE TABLE IF NOT EXISTS llm_provider_configs (
+        \\    id INTEGER PRIMARY KEY AUTOINCREMENT,
+        \\    user_id INTEGER NOT NULL,
+        \\    provider TEXT NOT NULL,
+        \\    api_key TEXT NOT NULL,
+        \\    model TEXT NOT NULL,
+        \\    base_url TEXT,
+        \\    is_default INTEGER DEFAULT 0,
+        \\    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        \\    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        \\    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+        \\    UNIQUE(user_id, provider)
+        \\);
+        ,
     };
 
     // Schema migrations (ALTER TABLE statements)

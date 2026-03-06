@@ -233,3 +233,40 @@ export interface MutedUser {
     avatar_url?: string;
     muted_at: string;
 }
+
+export type LlmProviderId =
+    | 'openai'
+    | 'anthropic'
+    | 'openrouter'
+    | 'groq'
+    | 'google'
+    | 'together';
+
+export interface LlmProvider {
+    id: LlmProviderId;
+    label: string;
+    description: string;
+    default_model: string;
+    supports_custom_base_url: boolean;
+}
+
+export interface LlmConfigSummary {
+    provider: LlmProviderId;
+    configured: boolean;
+    masked_api_key: string;
+    model: string;
+    base_url?: string;
+    is_default: boolean;
+    updated_at: string;
+}
+
+export interface LlmChatMessage {
+    role: 'user' | 'assistant';
+    content: string;
+}
+
+export interface LlmChatResponse {
+    provider: LlmProviderId;
+    model: string;
+    reply: string;
+}
