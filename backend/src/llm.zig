@@ -109,6 +109,16 @@ const PostContext = struct {
     display_name: ?[]const u8,
 };
 
+const ProviderCallResult = union(enum) {
+    success: []u8,
+    error_message: []u8,
+};
+
+const HttpResponseBody = struct {
+    status: u16,
+    body: []u8,
+};
+
 pub fn getProviders(_: std.mem.Allocator, _: *http.Request, res: *http.Response) !void {
     res.headers.put("Content-Type", "application/json") catch {};
     try res.body.appendSlice("{\"providers\":[");
@@ -445,7 +455,7 @@ pub fn chat(allocator: std.mem.Allocator, req: *http.Request, res: *http.Respons
     defer allocator.free(system_prompt);
 
     const config = config_rows.?[0];
-    const reply = switch (provider.kind) {
+    const provider_result = switch (provider.kind) {
         .openai_compatible => sendOpenAiCompatibleRequest(
             allocator,
             provider,
@@ -473,17 +483,31 @@ pub fn chat(allocator: std.mem.Allocator, req: *http.Request, res: *http.Respons
             body.messages,
         ),
     } catch |err| {
-        const error_message = switch (err) {
-            error.ProviderRequestFailed => "The provider request failed",
-            error.ProviderBadResponse => "The provider returned an unexpected response",
-            else => "Failed to complete AI request",
-        };
         res.status = 502;
         res.headers.put("Content-Type", "application/json") catch {};
+        const error_message = switch (err) {
+            error.ProviderRequestFailed => try std.fmt.allocPrint(allocator, "Provider request failed: {s}", .{@errorName(err)}),
+            error.ProviderBadResponse => try allocator.dupe(u8, "The provider returned an unexpected response"),
+            else => try std.fmt.allocPrint(allocator, "Failed to complete AI request: {s}", .{@errorName(err)}),
+        };
+        defer allocator.free(error_message);
         const escaped_error = try json_utils.escapeJson(allocator, error_message);
         defer allocator.free(escaped_error);
         try res.body.writer().print("{{\"error\":\"{s}\"}}", .{escaped_error});
         return;
+    };
+
+    const reply = switch (provider_result) {
+        .success => |value| value,
+        .error_message => |value| {
+            defer allocator.free(value);
+            res.status = 502;
+            res.headers.put("Content-Type", "application/json") catch {};
+            const escaped_error = try json_utils.escapeJson(allocator, value);
+            defer allocator.free(escaped_error);
+            try res.body.writer().print("{{\"error\":\"{s}\"}}", .{escaped_error});
+            return;
+        },
     };
     defer allocator.free(reply);
 
@@ -621,7 +645,7 @@ fn sendOpenAiCompatibleRequest(
     base_url: ?[]const u8,
     system_prompt: []const u8,
     messages: []ChatMessage,
-) ![]u8 {
+) !ProviderCallResult {
     var body = std.ArrayList(u8).init(allocator);
     defer body.deinit();
     try body.appendSlice("{\"model\":");
@@ -645,9 +669,14 @@ fn sendOpenAiCompatibleRequest(
         try headers.append(.{ .name = "X-Title", .value = "Xeetapus" });
     }
 
-    const response_body = try postJson(allocator, base_url orelse provider.default_endpoint, body.items, headers.items);
-    defer allocator.free(response_body);
-    return extractOpenAiCompatibleReply(allocator, response_body);
+    const response = try postJson(allocator, base_url orelse provider.default_endpoint, body.items, headers.items);
+    defer allocator.free(response.body);
+
+    if (response.status >= 300) {
+        return .{ .error_message = try extractProviderError(allocator, response.body, response.status) };
+    }
+
+    return .{ .success = try extractOpenAiCompatibleReply(allocator, response.body) };
 }
 
 fn sendAnthropicRequest(
@@ -658,7 +687,7 @@ fn sendAnthropicRequest(
     base_url: ?[]const u8,
     system_prompt: []const u8,
     messages: []ChatMessage,
-) ![]u8 {
+) !ProviderCallResult {
     _ = provider;
     var body = std.ArrayList(u8).init(allocator);
     defer body.deinit();
@@ -682,9 +711,14 @@ fn sendAnthropicRequest(
     try headers.append(.{ .name = "x-api-key", .value = api_key });
     try headers.append(.{ .name = "anthropic-version", .value = "2023-06-01" });
 
-    const response_body = try postJson(allocator, base_url orelse "https://api.anthropic.com/v1/messages", body.items, headers.items);
-    defer allocator.free(response_body);
-    return extractAnthropicReply(allocator, response_body);
+    const response = try postJson(allocator, base_url orelse "https://api.anthropic.com/v1/messages", body.items, headers.items);
+    defer allocator.free(response.body);
+
+    if (response.status >= 300) {
+        return .{ .error_message = try extractProviderError(allocator, response.body, response.status) };
+    }
+
+    return .{ .success = try extractAnthropicReply(allocator, response.body) };
 }
 
 fn sendGeminiRequest(
@@ -694,7 +728,7 @@ fn sendGeminiRequest(
     model: []const u8,
     system_prompt: []const u8,
     messages: []ChatMessage,
-) ![]u8 {
+) !ProviderCallResult {
     const url = try std.fmt.allocPrint(
         allocator,
         "{s}/{path}:generateContent?key={s}",
@@ -721,9 +755,14 @@ fn sendGeminiRequest(
     }
     try body.appendSlice("],\"generationConfig\":{\"temperature\":0.7}}");
 
-    const response_body = try postJson(allocator, url, body.items, &.{});
-    defer allocator.free(response_body);
-    return extractGeminiReply(allocator, response_body);
+    const response = try postJson(allocator, url, body.items, &.{});
+    defer allocator.free(response.body);
+
+    if (response.status >= 300) {
+        return .{ .error_message = try extractProviderError(allocator, response.body, response.status) };
+    }
+
+    return .{ .success = try extractGeminiReply(allocator, response.body) };
 }
 
 fn appendMessageObject(writer: anytype, role: []const u8, content: []const u8) !void {
@@ -739,7 +778,7 @@ fn postJson(
     url: []const u8,
     payload: []const u8,
     extra_headers: []const std.http.Header,
-) ![]u8 {
+) !HttpResponseBody {
     var client = std.http.Client{ .allocator = allocator };
     defer client.deinit();
 
@@ -760,11 +799,10 @@ fn postJson(
         return error.ProviderRequestFailed;
     };
 
-    if (@intFromEnum(result.status) >= 300) {
-        return error.ProviderRequestFailed;
-    }
-
-    return response.toOwnedSlice();
+    return .{
+        .status = @intFromEnum(result.status),
+        .body = try response.toOwnedSlice(),
+    };
 }
 
 fn extractOpenAiCompatibleReply(allocator: std.mem.Allocator, response_body: []const u8) ![]u8 {
@@ -808,6 +846,59 @@ fn extractGeminiReply(allocator: std.mem.Allocator, response_body: []const u8) !
 fn getObjectValue(value: std.json.Value, key: []const u8) ?std.json.Value {
     if (value != .object) return null;
     return value.object.get(key);
+}
+
+fn extractProviderError(allocator: std.mem.Allocator, response_body: []const u8, status: u16) ![]u8 {
+    const parsed = std.json.parseFromSlice(std.json.Value, allocator, response_body, .{}) catch {
+        const trimmed = std.mem.trim(u8, response_body, " \n\r\t");
+        if (trimmed.len > 0) {
+            return allocator.dupe(u8, trimmed);
+        }
+        return std.fmt.allocPrint(allocator, "Provider returned HTTP {d}", .{status});
+    };
+    defer parsed.deinit();
+
+    if (findErrorMessage(parsed.value)) |message| {
+        const trimmed = std.mem.trim(u8, message, " \n\r\t");
+        if (trimmed.len > 0) {
+            return allocator.dupe(u8, trimmed);
+        }
+    }
+
+    const trimmed = std.mem.trim(u8, response_body, " \n\r\t");
+    if (trimmed.len > 0) {
+        return allocator.dupe(u8, trimmed);
+    }
+
+    return std.fmt.allocPrint(allocator, "Provider returned HTTP {d}", .{status});
+}
+
+fn findErrorMessage(value: std.json.Value) ?[]const u8 {
+    switch (value) {
+        .string => |text| return text,
+        .object => |object| {
+            if (object.get("error")) |error_value| {
+                if (findErrorMessage(error_value)) |message| return message;
+            }
+            if (object.get("message")) |message_value| {
+                if (findErrorMessage(message_value)) |message| return message;
+            }
+            if (object.get("detail")) |detail_value| {
+                if (findErrorMessage(detail_value)) |message| return message;
+            }
+            if (object.get("details")) |details_value| {
+                if (findErrorMessage(details_value)) |message| return message;
+            }
+            return null;
+        },
+        .array => |array| {
+            for (array.items) |item| {
+                if (findErrorMessage(item)) |message| return message;
+            }
+            return null;
+        },
+        else => return null,
+    }
 }
 
 fn valueToText(allocator: std.mem.Allocator, value: std.json.Value) ![]u8 {
