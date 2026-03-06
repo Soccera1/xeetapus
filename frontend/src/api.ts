@@ -79,9 +79,20 @@ export class ApiClient {
                 error.status = 429;
                 throw error;
             }
-            
-            const error = await response.json().catch(() => ({ error: 'Unknown error' }));
-            throw new Error(error.error || `HTTP ${response.status}`);
+
+            const errorText = await response.text();
+            let message = '';
+
+            if (errorText) {
+                try {
+                    const errorJson = JSON.parse(errorText) as { error?: string; message?: string; detail?: string };
+                    message = errorJson.error || errorJson.message || errorJson.detail || '';
+                } catch {
+                    message = errorText.trim();
+                }
+            }
+
+            throw new Error(message || `HTTP ${response.status}`);
         }
 
         if (response.status === 204) {
@@ -529,8 +540,19 @@ export class ApiClient {
                 this.clearToken();
                 window.dispatchEvent(new CustomEvent('auth:unauthorized'));
             }
-            const error = await response.json().catch(() => ({ error: 'Unknown error' }));
-            throw new Error(error.error || `HTTP ${response.status}`);
+            const errorText = await response.text();
+            let message = '';
+
+            if (errorText) {
+                try {
+                    const errorJson = JSON.parse(errorText) as { error?: string; message?: string; detail?: string };
+                    message = errorJson.error || errorJson.message || errorJson.detail || '';
+                } catch {
+                    message = errorText.trim();
+                }
+            }
+
+            throw new Error(message || `HTTP ${response.status}`);
         }
 
         return response.json();
