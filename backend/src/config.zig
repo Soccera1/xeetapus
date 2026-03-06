@@ -20,9 +20,9 @@ pub const Config = struct {
     pub fn init(allocator: std.mem.Allocator) !void {
         if (instance != null) return;
 
-        const jwt_secret = std.process.getEnvVarOwned(allocator, "XEETAPUS_JWT_SECRET") catch {
+        const jwt_secret = std.process.getEnvVarOwned(allocator, "XEETAPUS_JWT_SECRET") catch blk: {
             std.log.warn("XEETAPUS_JWT_SECRET not set, using default (INSECURE - CHANGE IN PRODUCTION)", .{});
-            return;
+            break :blk try allocator.dupe(u8, "INSECURE_DEFAULT_SECRET_CHANGE_ME");
         };
         errdefer allocator.free(jwt_secret);
 
@@ -112,7 +112,7 @@ pub const Config = struct {
             .environment = env,
             .cookie_secure = cookie_secure,
             .cookie_http_only = cookie_http_only,
-            .cookie_same_site = "Strict",
+            .cookie_same_site = "Lax",
             .csrf_secret = csrf_secret,
         };
     }

@@ -38,7 +38,7 @@ pub fn upload(allocator: std.mem.Allocator, req: *http.Request, res: *http.Respo
     defer allocator.free(username);
 
     // Parse multipart form data
-    const content_type = req.headers.get("Content-Type") orelse {
+    const content_type = req.headers.get("content-type") orelse {
         res.status = 400;
         res.headers.put("Content-Type", "application/json") catch {};
         try res.body.appendSlice("{\"error\":\"Missing Content-Type header\"}");

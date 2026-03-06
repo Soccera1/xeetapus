@@ -13,6 +13,10 @@ pub const Request = struct {
     remote_addr: net.Address,
 
     pub fn deinit(self: *Request) void {
+        var iter = self.headers.iterator();
+        while (iter.next()) |entry| {
+            self.allocator.free(entry.key_ptr.*);
+        }
         self.headers.deinit();
         self.params.deinit();
         self.allocator.free(self.body);
@@ -96,9 +100,13 @@ pub const Response = struct {
 
         // CORS headers - only allow specific origins
         if (request_origin) |origin| {
+            std.log.debug("Checking origin: {s}", .{origin});
             if (config.Config.isOriginAllowed(origin)) {
+                std.log.debug("Origin allowed, adding CORS headers", .{});
                 try writer.print("Access-Control-Allow-Origin: {s}\r\n", .{origin});
                 try writer.writeAll("Access-Control-Allow-Credentials: true\r\n");
+            } else {
+                std.log.debug("Origin NOT allowed: {s}", .{origin});
             }
         }
         try writer.writeAll("Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS\r\n");
@@ -140,7 +148,7 @@ pub const Route = struct {
         while (it.next()) |segment| {
             if (segment.len == 0) continue;
             try segments.append(segment);
-            if (segment[0] == ':') {
+            if (segment[0] == ':' or std.mem.eql(u8, segment, "*")) {
                 has_params = true;
             }
         }
@@ -168,6 +176,35 @@ pub const Route = struct {
         while (it.next()) |segment| {
             if (segment.len == 0) continue;
             try req_segments.append(segment);
+        }
+
+        // Check for wildcard route (last segment is *)
+        const is_wildcard = self.segments.items.len > 0 and
+            std.mem.eql(u8, self.segments.items[self.segments.items.len - 1], "*");
+
+        if (is_wildcard) {
+            const non_wildcard_count = self.segments.items.len - 1;
+            if (req_segments.items.len < non_wildcard_count) {
+                return false;
+            }
+            for (self.segments.items[0..non_wildcard_count], req_segments.items[0..non_wildcard_count]) |route_seg, req_seg| {
+                if (route_seg[0] == ':') {
+                    const param_name = route_seg[1..];
+                    try params.put(param_name, req_seg);
+                } else if (!std.mem.eql(u8, route_seg, req_seg)) {
+                    return false;
+                }
+            }
+            if (req_segments.items.len > non_wildcard_count) {
+                var offset: usize = 1;
+                for (req_segments.items[0..non_wildcard_count]) |seg| {
+                    offset += seg.len + 1;
+                }
+                if (offset < request_path.len) {
+                    try params.put("path", request_path[offset..]);
+                }
+            }
+            return true;
         }
 
         if (req_segments.items.len != self.segments.items.len) {
@@ -305,7 +342,7 @@ pub const Server = struct {
         res.addSecurityHeaders(self.is_production);
 
         // Get origin for CORS
-        const origin = req.headers.get("Origin");
+        const origin = req.headers.get("origin");
 
         // Handle CORS preflight
         if (std.mem.eql(u8, req.method, "OPTIONS")) {
@@ -434,9 +471,27 @@ pub const Server = struct {
             if (trimmed.len == 0) break;
 
             if (std.mem.indexOf(u8, trimmed, ": ")) |colon_pos| {
-                const key = trimmed[0..colon_pos];
-                const value = trimmed[colon_pos + 2 ..];
-                try headers.put(key, value);
+                const key_raw = trimmed[0..colon_pos];
+                // Use a fixed-size buffer for keys up to 63 chars
+                if (key_raw.len < 64) {
+                    var key_buf: [64]u8 = undefined;
+                    for (key_raw, 0..) |c, i| {
+                        key_buf[i] = std.ascii.toLower(c);
+                    }
+                    const key_lower = key_buf[0..key_raw.len];
+                    const value = trimmed[colon_pos + 2 ..];
+
+                    // Check if key already exists before duplicating
+                    if (!headers.contains(key_lower)) {
+                        const key = try self.allocator.dupe(u8, key_lower);
+                        // Use putNoClobber to catch duplicate insertion attempts
+                        headers.putNoClobber(key, value) catch {
+                            // Key already exists (race condition or hash collision), free and continue
+                            self.allocator.free(key);
+                        };
+                    }
+                }
+                // Skip headers with keys >= 64 chars
             }
         }
 
