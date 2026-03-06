@@ -129,7 +129,7 @@ pub const RateLimiter = struct {
 /// Get client IP from request, considering X-Forwarded-For header
 pub fn getClientIp(req_headers: std.StringHashMap([]const u8), remote_addr: std.net.Address) []const u8 {
     // Check X-Forwarded-For header (for requests behind proxy)
-    if (req_headers.get("X-Forwarded-For")) |forwarded| {
+    if (req_headers.get("x-forwarded-for")) |forwarded| {
         // Take the first IP in the chain
         if (std.mem.indexOf(u8, forwarded, ",")) |comma| {
             return std.mem.trim(u8, forwarded[0..comma], " ");
@@ -138,7 +138,7 @@ pub fn getClientIp(req_headers: std.StringHashMap([]const u8), remote_addr: std.
     }
 
     // Check X-Real-IP header
-    if (req_headers.get("X-Real-IP")) |real_ip| {
+    if (req_headers.get("x-real-ip")) |real_ip| {
         return real_ip;
     }
 

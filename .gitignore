@@ -54,3 +54,6 @@ coverage/
 
 # Testing
 *.test
+
+# Deploy
+deploy/

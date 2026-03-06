@@ -886,7 +886,7 @@ pub fn recordView(allocator: std.mem.Allocator, req: *http.Request, res: *http.R
     };
 
     // Get client IP
-    const ip_address = req.headers.get("X-Forwarded-For") orelse req.headers.get("X-Real-IP") orelse "unknown";
+    const ip_address = req.headers.get("x-forwarded-for") orelse req.headers.get("x-real-ip") orelse "unknown";
 
     try analytics.recordView(allocator, post_id, user_id, ip_address);
 

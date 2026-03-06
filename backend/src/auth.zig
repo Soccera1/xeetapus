@@ -91,7 +91,7 @@ pub fn register(allocator: std.mem.Allocator, req: *http.Request, res: *http.Res
 
     // Set HTTP-only cookie with auth token
     const cookie_secure = if (cfg.cookie_secure) "; Secure" else "";
-    const cookie_str = try std.fmt.allocPrint(allocator, "auth_token={s}; HttpOnly{s}; SameSite=Strict; Path=/; Max-Age={d}", .{
+    const cookie_str = try std.fmt.allocPrint(allocator, "auth_token={s}; HttpOnly{s}; SameSite=Lax; Path=/; Max-Age={d}", .{
         token, cookie_secure, TOKEN_EXPIRATION_SECONDS,
     });
     res.headers.put("Set-Cookie", cookie_str) catch {};
@@ -168,7 +168,7 @@ pub fn login(allocator: std.mem.Allocator, req: *http.Request, res: *http.Respon
 
     // Set HTTP-only cookie with token
     const cookie_secure = if (cfg.cookie_secure) "; Secure" else "";
-    const cookie_str = try std.fmt.allocPrint(allocator, "auth_token={s}; HttpOnly{s}; SameSite=Strict; Path=/; Max-Age={d}", .{
+    const cookie_str = try std.fmt.allocPrint(allocator, "auth_token={s}; HttpOnly{s}; SameSite=Lax; Path=/; Max-Age={d}", .{
         token, cookie_secure, TOKEN_EXPIRATION_SECONDS,
     });
     res.headers.put("Set-Cookie", cookie_str) catch {};
@@ -193,7 +193,7 @@ pub fn logout(allocator: std.mem.Allocator, req: *http.Request, res: *http.Respo
     const user_id = try getUserIdFromRequest(allocator, req);
 
     // Clear the auth cookie
-    res.headers.put("Set-Cookie", "auth_token=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0") catch {};
+    res.headers.put("Set-Cookie", "auth_token=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0") catch {};
     res.headers.put("Content-Type", "application/json") catch {};
 
     // Log logout
@@ -242,21 +242,32 @@ pub fn me(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response)
 }
 
 pub fn getUserIdFromRequest(allocator: std.mem.Allocator, req: *http.Request) !?i64 {
-    // First try to get token from cookie (more secure)
-    if (req.headers.get("Cookie")) |cookie_header| {
+    std.log.debug("getUserIdFromRequest: checking for cookie header", .{});
+    if (req.headers.get("cookie")) |cookie_header| {
+        std.log.debug("getUserIdFromRequest: cookie header found: {s}", .{cookie_header});
         var it = std.mem.splitScalar(u8, cookie_header, ';');
         while (it.next()) |cookie| {
             const trimmed = std.mem.trim(u8, cookie, " ");
+            std.log.debug("getUserIdFromRequest: checking cookie: {s}", .{trimmed});
             if (std.mem.startsWith(u8, trimmed, "auth_token=")) {
-                const token = trimmed[11..]; // Skip "auth_token="
+                const token = trimmed[11..];
+                std.log.debug("getUserIdFromRequest: found auth_token, verifying...", .{});
                 const cfg = try config.Config.get();
-                return try security.verifySignedToken(allocator, cfg.jwt_secret, token);
+                const result = security.verifySignedToken(allocator, cfg.jwt_secret, token) catch |err| {
+                    std.log.debug("getUserIdFromRequest: token verification failed: {s}", .{@errorName(err)});
+                    return null;
+                };
+                std.log.debug("getUserIdFromRequest: token verified, user_id={?}", .{result});
+                return result;
             }
         }
+        std.log.debug("getUserIdFromRequest: no auth_token cookie found", .{});
+    } else {
+        std.log.debug("getUserIdFromRequest: no cookie header at all", .{});
     }
 
-    // Fallback to Authorization header
-    const auth_header = req.headers.get("Authorization") orelse return null;
+    std.log.debug("getUserIdFromRequest: checking Authorization header", .{});
+    const auth_header = req.headers.get("authorization") orelse return null;
 
     if (!std.mem.startsWith(u8, auth_header, "Bearer ")) {
         return null;

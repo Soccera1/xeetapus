@@ -20,7 +20,7 @@ const media = @import("media.zig");
 const config = @import("config.zig");
 const audit = @import("audit.zig");
 
-const PUBLIC_DIR = "../frontend/dist";
+const PUBLIC_DIR = "./dist";
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -154,8 +154,9 @@ pub fn main() !void {
 
     try server.addPublicRoute("GET", "/api/health", healthCheck);
 
-    // Register static file handler for all other routes
-    try server.addPublicRoute("GET", "/", serveStaticFiles);
+    // Register static file handler as fallback for unmatched routes
+    // The /* path with params will match all GET requests
+    try server.addPublicRoute("GET", "/*", serveStaticFiles);
 
     std.log.info("Xeetapus server starting on port {d}...", .{cfg.server_port});
     try server.start();
@@ -167,8 +168,9 @@ fn healthCheck(_: std.mem.Allocator, _: *http.Request, res: *http.Response) !voi
 }
 
 fn serveStaticFiles(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response) !void {
-    // Remove leading slash and get safe path
-    const path = if (req.path.len > 1) req.path[1..] else "index.html";
+    // Get path from params (wildcard route) or request path
+    const path_param = req.params.get("path");
+    const path = if (path_param) |p| p else if (req.path.len > 1) req.path[1..] else "index.html";
 
     // SECURITY: Prevent path traversal attacks
     // Check for path traversal sequences
