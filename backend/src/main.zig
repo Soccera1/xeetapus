@@ -150,7 +150,7 @@ pub fn main() !void {
 
     // Media routes
     try server.addRoute("POST", "/api/media/upload", media.upload);
-    try server.addPublicRoute("GET", "/media", media.serveMedia);
+    try server.addPublicRoute("GET", "/media/*", media.serveMedia);
 
     try server.addPublicRoute("GET", "/api/health", healthCheck);
 
