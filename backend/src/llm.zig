@@ -486,8 +486,9 @@ pub fn chat(allocator: std.mem.Allocator, req: *http.Request, res: *http.Respons
         res.status = 502;
         res.headers.put("Content-Type", "application/json") catch {};
         const error_message = switch (err) {
-            error.ProviderRequestFailed => try std.fmt.allocPrint(allocator, "Provider request failed: {s}", .{@errorName(err)}),
-            error.ProviderBadResponse => try allocator.dupe(u8, "The provider returned an unexpected response"),
+            error.ProviderRequestFailed => try allocator.dupe(u8, "The AI provider could not be reached. Please try again in a moment."),
+            error.ProviderRequestTimeout => try allocator.dupe(u8, "The AI provider is taking too long to respond. Please try again."),
+            error.ProviderBadResponse => try allocator.dupe(u8, "The AI provider returned an unexpected response"),
             else => try std.fmt.allocPrint(allocator, "Failed to complete AI request: {s}", .{@errorName(err)}),
         };
         defer allocator.free(error_message);
@@ -773,6 +774,8 @@ fn appendMessageObject(writer: anytype, role: []const u8, content: []const u8) !
     try writer.writeAll("}");
 }
 
+const REQUEST_TIMEOUT_MS: u64 = 60000; // 60 seconds total timeout
+
 fn postJson(
     allocator: std.mem.Allocator,
     url: []const u8,
@@ -785,6 +788,8 @@ fn postJson(
     var response = std.ArrayList(u8).init(allocator);
     defer response.deinit();
 
+    const start_time = std.time.milliTimestamp();
+
     const result = client.fetch(.{
         .location = .{ .url = url },
         .method = .POST,
@@ -795,9 +800,23 @@ fn postJson(
         .extra_headers = extra_headers,
         .response_storage = .{ .dynamic = &response },
         .max_append_size = 1024 * 1024,
-    }) catch {
-        return error.ProviderRequestFailed;
+    }) catch |err| {
+        const elapsed = std.time.milliTimestamp() - start_time;
+        std.log.warn("LLM request failed after {d}ms: {s}", .{ elapsed, @errorName(err) });
+        // Provide more specific error messages
+        return switch (err) {
+            error.ConnectionTimedOut => error.ProviderRequestTimeout,
+            else => error.ProviderRequestFailed,
+        };
     };
+
+    const elapsed = std.time.milliTimestamp() - start_time;
+    std.log.info("LLM request completed in {d}ms", .{elapsed});
+
+    // Check if request took longer than timeout threshold
+    if (elapsed > REQUEST_TIMEOUT_MS) {
+        return error.ProviderRequestTimeout;
+    }
 
     return .{
         .status = @intFromEnum(result.status),
