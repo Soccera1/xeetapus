@@ -4,9 +4,10 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Heart, MessageCircle, Repeat2, Bookmark, Eye, Pin, Image, Quote, Trash2 } from 'lucide-react';
+import { Heart, MessageCircle, Repeat2, Bookmark, Eye, Pin, Image, Quote, Trash2, Bot } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { LlmChatDialog } from './LlmChatDialog';
 
 interface PostCardProps {
     post: Post;
@@ -378,6 +379,14 @@ export function PostCard({ post, onUpdate, onDelete }: PostCardProps) {
                                 >
                                     <Quote className="h-4 w-4" />
                                 </Button>
+                                <LlmChatDialog
+                                    post={localPost}
+                                    triggerLabel="AI"
+                                    triggerIcon={<Bot className="h-4 w-4" />}
+                                    triggerVariant="ghost"
+                                    triggerSize="sm"
+                                    triggerClassName="gap-2"
+                                />
                             </div>
 
                             <div className="flex items-center gap-1 sm:gap-4">

@@ -1,4 +1,4 @@
-import type { User, Post, Profile, Comment, Notification, LoginRequest, RegisterRequest, CreatePostRequest, CommentRequest, Community, CreateCommunityRequest, Conversation, Message, UserList, ListMember, Hashtag, PollOption, Draft, ScheduledPost, UserAnalytics, BlockedUser, MutedUser } from './types';
+import type { User, Post, Profile, Comment, Notification, LoginRequest, RegisterRequest, CreatePostRequest, CommentRequest, Community, CreateCommunityRequest, Conversation, Message, UserList, ListMember, Hashtag, PollOption, Draft, ScheduledPost, UserAnalytics, BlockedUser, MutedUser, LlmProvider, LlmConfigSummary, LlmChatMessage, LlmChatResponse, LlmProviderId } from './types';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
@@ -534,6 +534,47 @@ export class ApiClient {
         }
 
         return response.json();
+    }
+
+    async getLlmProviders(): Promise<{ providers: LlmProvider[] }> {
+        return this.fetch('/llm/providers');
+    }
+
+    async getLlmConfigs(): Promise<{ configs: LlmConfigSummary[] }> {
+        return this.fetch('/llm/configs');
+    }
+
+    async updateLlmConfig(
+        provider: LlmProviderId,
+        data: { api_key?: string; model?: string; base_url?: string; is_default?: boolean }
+    ): Promise<{ saved: boolean }> {
+        return this.fetch(`/llm/configs/${provider}`, {
+            method: 'PUT',
+            body: JSON.stringify(data)
+        });
+    }
+
+    async deleteLlmConfig(provider: LlmProviderId): Promise<{ deleted: boolean }> {
+        return this.fetch(`/llm/configs/${provider}`, {
+            method: 'DELETE'
+        });
+    }
+
+    async revealLlmConfig(provider: LlmProviderId): Promise<{ provider: LlmProviderId; api_key: string }> {
+        return this.fetch(`/llm/configs/${provider}/reveal`, {
+            method: 'POST'
+        });
+    }
+
+    async chatWithLlm(data: {
+        provider?: LlmProviderId;
+        post_id?: number;
+        messages: LlmChatMessage[];
+    }): Promise<LlmChatResponse> {
+        return this.fetch('/llm/chat', {
+            method: 'POST',
+            body: JSON.stringify(data)
+        });
     }
 }
 
