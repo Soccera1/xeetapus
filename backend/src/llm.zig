@@ -732,8 +732,8 @@ fn sendGeminiRequest(
 ) !ProviderCallResult {
     const url = try std.fmt.allocPrint(
         allocator,
-        "{s}/{path}:generateContent?key={s}",
-        .{ provider.default_endpoint, std.Uri.Component{ .raw = model }, api_key },
+        "{s}/{s}:generateContent?key={s}",
+        .{ provider.default_endpoint, model, api_key },
     );
     defer allocator.free(url);
 
