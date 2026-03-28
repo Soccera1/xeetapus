@@ -38,7 +38,7 @@ pub fn list(allocator: std.mem.Allocator, req: *http.Request, res: *http.Respons
     const user_id = try auth.getUserIdFromRequest(allocator, req) orelse {
         res.status = 401;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Unauthorized\"}");
+        try res.append("{\"error\":\"Unauthorized\"}");
         return;
     };
 
@@ -59,16 +59,16 @@ pub fn list(allocator: std.mem.Allocator, req: *http.Request, res: *http.Respons
     const rows = db.query(Notification, allocator, sql, &[_][]const u8{user_id_str}) catch {
         res.status = 500;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Failed to fetch notifications\"}");
+        try res.append("{\"error\":\"Failed to fetch notifications\"}");
         return;
     };
     defer db.freeRows(Notification, allocator, rows);
 
     res.headers.put("Content-Type", "application/json") catch {};
-    try res.body.appendSlice("[");
+    try res.append("[");
 
     for (rows, 0..) |notif, i| {
-        if (i > 0) try res.body.appendSlice(",");
+        if (i > 0) try res.append(",");
         const escaped_type = try json_utils.escapeJson(allocator, notif.type);
         defer allocator.free(escaped_type);
         const escaped_actor_username = try json_utils.escapeJson(allocator, notif.actor_username);
@@ -81,17 +81,17 @@ pub fn list(allocator: std.mem.Allocator, req: *http.Request, res: *http.Respons
         const post_id_str = if (notif.post_id) |id| try std.fmt.allocPrint(allocator, "{d}", .{id}) else "null";
         defer if (notif.post_id != null) allocator.free(post_id_str);
 
-        try res.body.writer().print("{{\"id\":{d},\"actor_id\":{d},\"actor_username\":\"{s}\",\"actor_display_name\":\"{s}\",\"type\":\"{s}\",\"post_id\":{s},\"read\":{s},\"created_at\":\"{s}\"}}", .{ notif.id, notif.actor_id, escaped_actor_username, escaped_actor_display_name, escaped_type, post_id_str, if (notif.read) "true" else "false", escaped_created_at });
+        try res.bodyWriter().print("{{\"id\":{d},\"actor_id\":{d},\"actor_username\":\"{s}\",\"actor_display_name\":\"{s}\",\"type\":\"{s}\",\"post_id\":{s},\"read\":{s},\"created_at\":\"{s}\"}}", .{ notif.id, notif.actor_id, escaped_actor_username, escaped_actor_display_name, escaped_type, post_id_str, if (notif.read) "true" else "false", escaped_created_at });
     }
 
-    try res.body.appendSlice("]");
+    try res.append("]");
 }
 
 pub fn markAsRead(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response) !void {
     const user_id = try auth.getUserIdFromRequest(allocator, req) orelse {
         res.status = 401;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Unauthorized\"}");
+        try res.append("{\"error\":\"Unauthorized\"}");
         return;
     };
 
@@ -112,7 +112,7 @@ pub fn markAsRead(allocator: std.mem.Allocator, req: *http.Request, res: *http.R
     if (notif_id == null) {
         res.status = 400;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Invalid notification ID\"}");
+        try res.append("{\"error\":\"Invalid notification ID\"}");
         return;
     }
 
@@ -125,19 +125,19 @@ pub fn markAsRead(allocator: std.mem.Allocator, req: *http.Request, res: *http.R
     db.execute(sql, &[_][]const u8{ notif_id_str, user_id_str }) catch {
         res.status = 500;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Failed to mark notification as read\"}");
+        try res.append("{\"error\":\"Failed to mark notification as read\"}");
         return;
     };
 
     res.headers.put("Content-Type", "application/json") catch {};
-    try res.body.appendSlice("{\"read\":true}");
+    try res.append("{\"read\":true}");
 }
 
 pub fn markAllAsRead(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response) !void {
     const user_id = try auth.getUserIdFromRequest(allocator, req) orelse {
         res.status = 401;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Unauthorized\"}");
+        try res.append("{\"error\":\"Unauthorized\"}");
         return;
     };
 
@@ -148,19 +148,19 @@ pub fn markAllAsRead(allocator: std.mem.Allocator, req: *http.Request, res: *htt
     db.execute(sql, &[_][]const u8{user_id_str}) catch {
         res.status = 500;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Failed to mark notifications as read\"}");
+        try res.append("{\"error\":\"Failed to mark notifications as read\"}");
         return;
     };
 
     res.headers.put("Content-Type", "application/json") catch {};
-    try res.body.appendSlice("{\"read\":true}");
+    try res.append("{\"read\":true}");
 }
 
 pub fn getUnreadCount(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response) !void {
     const user_id = try auth.getUserIdFromRequest(allocator, req) orelse {
         res.status = 401;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Unauthorized\"}");
+        try res.append("{\"error\":\"Unauthorized\"}");
         return;
     };
 
@@ -175,7 +175,7 @@ pub fn getUnreadCount(allocator: std.mem.Allocator, req: *http.Request, res: *ht
     const rows = db.query(CountResult, allocator, sql, &[_][]const u8{user_id_str}) catch {
         res.status = 500;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Failed to get unread count\"}");
+        try res.append("{\"error\":\"Failed to get unread count\"}");
         return;
     };
     defer db.freeRows(CountResult, allocator, rows);
@@ -183,5 +183,5 @@ pub fn getUnreadCount(allocator: std.mem.Allocator, req: *http.Request, res: *ht
     const count = if (rows.len > 0) rows[0].count else 0;
 
     res.headers.put("Content-Type", "application/json") catch {};
-    try res.body.writer().print("{{\"unread_count\":{d}}}", .{count});
+    try res.bodyWriter().print("{{\"unread_count\":{d}}}", .{count});
 }

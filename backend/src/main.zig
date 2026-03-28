@@ -173,7 +173,7 @@ pub fn main() !void {
 
 fn healthCheck(_: std.mem.Allocator, _: *http.Request, res: *http.Response) !void {
     res.headers.put("Content-Type", "application/json") catch {};
-    try res.body.appendSlice("{\"status\":\"ok\",\"service\":\"xeetapus\"}");
+    try res.append("{\"status\":\"ok\",\"service\":\"xeetapus\"}");
 }
 
 fn serveStaticFiles(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response) !void {
@@ -190,7 +190,7 @@ fn serveStaticFiles(allocator: std.mem.Allocator, req: *http.Request, res: *http
     {
         res.status = 403;
         res.headers.put("Content-Type", "text/plain") catch {};
-        try res.body.appendSlice("Forbidden");
+        try res.append("Forbidden");
         return;
     }
 
@@ -198,7 +198,7 @@ fn serveStaticFiles(allocator: std.mem.Allocator, req: *http.Request, res: *http
     const full_path = std.fs.path.join(allocator, &[_][]const u8{ PUBLIC_DIR, path }) catch {
         res.status = 500;
         res.headers.put("Content-Type", "text/plain") catch {};
-        try res.body.appendSlice("Internal Server Error");
+        try res.append("Internal Server Error");
         return;
     };
     defer allocator.free(full_path);
@@ -211,7 +211,7 @@ fn serveStaticFiles(allocator: std.mem.Allocator, req: *http.Request, res: *http
         }
         res.status = 500;
         res.headers.put("Content-Type", "text/plain") catch {};
-        try res.body.appendSlice("Internal Server Error");
+        try res.append("Internal Server Error");
         return;
     };
     defer allocator.free(abs_path);
@@ -219,7 +219,7 @@ fn serveStaticFiles(allocator: std.mem.Allocator, req: *http.Request, res: *http
     const public_dir_abs = std.fs.cwd().realpathAlloc(allocator, PUBLIC_DIR) catch {
         res.status = 500;
         res.headers.put("Content-Type", "text/plain") catch {};
-        try res.body.appendSlice("Internal Server Error");
+        try res.append("Internal Server Error");
         return;
     };
     defer allocator.free(public_dir_abs);
@@ -228,7 +228,7 @@ fn serveStaticFiles(allocator: std.mem.Allocator, req: *http.Request, res: *http
     if (!std.mem.startsWith(u8, abs_path, public_dir_abs)) {
         res.status = 403;
         res.headers.put("Content-Type", "text/plain") catch {};
-        try res.body.appendSlice("Forbidden");
+        try res.append("Forbidden");
         return;
     }
 
@@ -242,7 +242,7 @@ fn serveStaticFiles(allocator: std.mem.Allocator, req: *http.Request, res: *http
 
         res.status = 404;
         res.headers.put("Content-Type", "text/plain") catch {};
-        try res.body.appendSlice("Not Found");
+        try res.append("Not Found");
         return;
     };
     defer file.close();
@@ -258,7 +258,7 @@ fn serveStaticFiles(allocator: std.mem.Allocator, req: *http.Request, res: *http
     if (stat.size > MAX_FILE_SIZE) {
         res.status = 413;
         res.headers.put("Content-Type", "text/plain") catch {};
-        try res.body.appendSlice("File too large");
+        try res.append("File too large");
         return;
     }
 
@@ -273,7 +273,7 @@ fn serveStaticFiles(allocator: std.mem.Allocator, req: *http.Request, res: *http
     const content_type = getContentType(path);
 
     res.headers.put("Content-Type", content_type) catch {};
-    try res.body.appendSlice(content);
+    try res.append(content);
 }
 
 fn serveIndexHtml(allocator: std.mem.Allocator, res: *http.Response) !void {
@@ -286,7 +286,7 @@ fn serveIndexHtml(allocator: std.mem.Allocator, res: *http.Response) !void {
     const index_file = std.fs.cwd().openFile(index_path, .{}) catch {
         res.status = 404;
         res.headers.put("Content-Type", "text/plain") catch {};
-        try res.body.appendSlice("Not Found");
+        try res.append("Not Found");
         return;
     };
     defer index_file.close();
@@ -298,7 +298,7 @@ fn serveIndexHtml(allocator: std.mem.Allocator, res: *http.Response) !void {
     defer allocator.free(content);
 
     res.headers.put("Content-Type", "text/html") catch {};
-    try res.body.appendSlice(content);
+    try res.append(content);
 }
 
 fn getContentType(path: []const u8) []const u8 {

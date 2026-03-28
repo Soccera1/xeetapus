@@ -9,14 +9,14 @@ pub fn searchUsers(allocator: std.mem.Allocator, req: *http.Request, res: *http.
     const query_start = std.mem.indexOf(u8, req.path, "?q=");
     if (query_start == null) {
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("[]");
+        try res.append("[]");
         return;
     }
 
     const query = req.path[query_start.? + 3 ..];
     if (query.len == 0) {
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("[]");
+        try res.append("[]");
         return;
     }
 
@@ -43,26 +43,26 @@ pub fn searchUsers(allocator: std.mem.Allocator, req: *http.Request, res: *http.
     const rows = db.query(User, allocator, sql, &params) catch {
         res.status = 500;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Failed to search users\"}");
+        try res.append("{\"error\":\"Failed to search users\"}");
         return;
     };
     defer db.freeRows(User, allocator, rows);
 
     res.headers.put("Content-Type", "application/json") catch {};
-    try res.body.appendSlice("[");
+    try res.append("[");
 
     for (rows, 0..) |user, idx| {
-        if (idx > 0) try res.body.appendSlice(",");
+        if (idx > 0) try res.append(",");
         const escaped_username = try json_utils.escapeJson(allocator, user.username);
         defer allocator.free(escaped_username);
         const escaped_display_name = try json_utils.escapeJson(allocator, user.display_name);
         defer allocator.free(escaped_display_name);
         const escaped_avatar_url = try json_utils.escapeJson(allocator, user.avatar_url);
         defer allocator.free(escaped_avatar_url);
-        try res.body.writer().print("{{\"id\":{d},\"username\":\"{s}\",\"display_name\":\"{s}\",\"avatar_url\":\"{s}\"}}", .{ user.id, escaped_username, escaped_display_name, escaped_avatar_url });
+        try res.bodyWriter().print("{{\"id\":{d},\"username\":\"{s}\",\"display_name\":\"{s}\",\"avatar_url\":\"{s}\"}}", .{ user.id, escaped_username, escaped_display_name, escaped_avatar_url });
     }
 
-    try res.body.appendSlice("]");
+    try res.append("]");
 }
 
 pub fn searchPosts(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response) !void {
@@ -72,14 +72,14 @@ pub fn searchPosts(allocator: std.mem.Allocator, req: *http.Request, res: *http.
     const query_start = std.mem.indexOf(u8, req.path, "?q=");
     if (query_start == null) {
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("[]");
+        try res.append("[]");
         return;
     }
 
     const query = req.path[query_start.? + 3 ..];
     if (query.len == 0) {
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("[]");
+        try res.append("[]");
         return;
     }
 
@@ -129,16 +129,16 @@ pub fn searchPosts(allocator: std.mem.Allocator, req: *http.Request, res: *http.
     const rows = db.query(Post, allocator, sql, &params) catch {
         res.status = 500;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Failed to search posts\"}");
+        try res.append("{\"error\":\"Failed to search posts\"}");
         return;
     };
     defer db.freeRows(Post, allocator, rows);
 
     res.headers.put("Content-Type", "application/json") catch {};
-    try res.body.appendSlice("[");
+    try res.append("[");
 
     for (rows, 0..) |post, idx| {
-        if (idx > 0) try res.body.appendSlice(",");
+        if (idx > 0) try res.append(",");
         const escaped_content = try json_utils.escapeJson(allocator, post.content);
         defer allocator.free(escaped_content);
         const escaped_username = try json_utils.escapeJson(allocator, post.username);
@@ -147,8 +147,8 @@ pub fn searchPosts(allocator: std.mem.Allocator, req: *http.Request, res: *http.
         defer allocator.free(escaped_display_name);
         const escaped_created_at = try json_utils.escapeJson(allocator, post.created_at);
         defer allocator.free(escaped_created_at);
-        try res.body.writer().print("{{\"id\":{d},\"user_id\":{d},\"username\":\"{s}\",\"display_name\":\"{s}\",\"content\":\"{s}\",\"created_at\":\"{s}\",\"likes_count\":{d},\"comments_count\":{d},\"reposts_count\":{d},\"is_liked\":{s},\"is_reposted\":{s},\"is_bookmarked\":{s}}}", .{ post.id, post.user_id, escaped_username, escaped_display_name, escaped_content, escaped_created_at, post.likes_count, post.comments_count, post.reposts_count, if (post.is_liked) "true" else "false", if (post.is_reposted) "true" else "false", if (post.is_bookmarked) "true" else "false" });
+        try res.bodyWriter().print("{{\"id\":{d},\"user_id\":{d},\"username\":\"{s}\",\"display_name\":\"{s}\",\"content\":\"{s}\",\"created_at\":\"{s}\",\"likes_count\":{d},\"comments_count\":{d},\"reposts_count\":{d},\"is_liked\":{s},\"is_reposted\":{s},\"is_bookmarked\":{s}}}", .{ post.id, post.user_id, escaped_username, escaped_display_name, escaped_content, escaped_created_at, post.likes_count, post.comments_count, post.reposts_count, if (post.is_liked) "true" else "false", if (post.is_reposted) "true" else "false", if (post.is_bookmarked) "true" else "false" });
     }
 
-    try res.body.appendSlice("]");
+    try res.append("]");
 }

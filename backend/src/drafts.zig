@@ -18,7 +18,7 @@ pub fn getDrafts(allocator: std.mem.Allocator, req: *http.Request, res: *http.Re
     const user_id = try auth.getUserIdFromRequest(allocator, req) orelse {
         res.status = 401;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Unauthorized\"}");
+        try res.append("{\"error\":\"Unauthorized\"}");
         return;
     };
 
@@ -36,33 +36,33 @@ pub fn getDrafts(allocator: std.mem.Allocator, req: *http.Request, res: *http.Re
         std.log.err("Failed to get drafts: {}", .{err});
         res.status = 500;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Failed to get drafts\"}");
+        try res.append("{\"error\":\"Failed to get drafts\"}");
         return;
     };
     defer db.freeRows(Draft, allocator, rows);
 
     res.headers.put("Content-Type", "application/json") catch {};
-    try res.body.writer().print("{{\"drafts\":[", .{});
+    try res.bodyWriter().print("{{\"drafts\":[", .{});
     for (rows, 0..) |row, i| {
-        if (i > 0) try res.body.writer().print(",", .{});
-        try res.body.writer().print("{{\"id\":{d},\"user_id\":{d},\"content\":\"{s}\"", .{
+        if (i > 0) try res.bodyWriter().print(",", .{});
+        try res.bodyWriter().print("{{\"id\":{d},\"user_id\":{d},\"content\":\"{s}\"", .{
             row.id, row.user_id, row.content,
         });
         if (row.media_urls) |urls| {
-            try res.body.writer().print(",\"media_urls\":\"{s}\"", .{urls});
+            try res.bodyWriter().print(",\"media_urls\":\"{s}\"", .{urls});
         }
-        try res.body.writer().print(",\"created_at\":\"{s}\",\"updated_at\":\"{s}\"}}", .{
+        try res.bodyWriter().print(",\"created_at\":\"{s}\",\"updated_at\":\"{s}\"}}", .{
             row.created_at, row.updated_at,
         });
     }
-    try res.body.writer().print("]}}", .{});
+    try res.bodyWriter().print("]}}", .{});
 }
 
 pub fn createDraft(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response) !void {
     const user_id = try auth.getUserIdFromRequest(allocator, req) orelse {
         res.status = 401;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Unauthorized\"}");
+        try res.append("{\"error\":\"Unauthorized\"}");
         return;
     };
 
@@ -74,7 +74,7 @@ pub fn createDraft(allocator: std.mem.Allocator, req: *http.Request, res: *http.
     }, allocator, body, .{}) catch {
         res.status = 400;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Invalid JSON\"}");
+        try res.append("{\"error\":\"Invalid JSON\"}");
         return;
     };
     defer parsed.deinit();
@@ -92,21 +92,21 @@ pub fn createDraft(allocator: std.mem.Allocator, req: *http.Request, res: *http.
     );
 
     res.headers.put("Content-Type", "application/json") catch {};
-    try res.body.writer().print("{{\"id\":{d},\"message\":\"Draft created\"}}", .{db.lastInsertRowId()});
+    try res.bodyWriter().print("{{\"id\":{d},\"message\":\"Draft created\"}}", .{db.lastInsertRowId()});
 }
 
 pub fn updateDraft(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response) !void {
     const user_id = try auth.getUserIdFromRequest(allocator, req) orelse {
         res.status = 401;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Unauthorized\"}");
+        try res.append("{\"error\":\"Unauthorized\"}");
         return;
     };
 
     const draft_id_str = req.params.get("id") orelse {
         res.status = 400;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Missing draft ID\"}");
+        try res.append("{\"error\":\"Missing draft ID\"}");
         return;
     };
 
@@ -118,7 +118,7 @@ pub fn updateDraft(allocator: std.mem.Allocator, req: *http.Request, res: *http.
     }, allocator, body, .{}) catch {
         res.status = 400;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Invalid JSON\"}");
+        try res.append("{\"error\":\"Invalid JSON\"}");
         return;
     };
     defer parsed.deinit();
@@ -132,7 +132,7 @@ pub fn updateDraft(allocator: std.mem.Allocator, req: *http.Request, res: *http.
         std.log.err("Failed to check ownership: {}", .{err});
         res.status = 500;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Failed to check ownership\"}");
+        try res.append("{\"error\":\"Failed to check ownership\"}");
         return;
     };
     defer db.freeRows(UserIdRow, allocator, check_rows);
@@ -140,14 +140,14 @@ pub fn updateDraft(allocator: std.mem.Allocator, req: *http.Request, res: *http.
     if (check_rows.len == 0) {
         res.status = 404;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Draft not found\"}");
+        try res.append("{\"error\":\"Draft not found\"}");
         return;
     }
 
     if (check_rows[0].user_id != user_id) {
         res.status = 403;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Not authorized\"}");
+        try res.append("{\"error\":\"Not authorized\"}");
         return;
     }
 
@@ -161,21 +161,21 @@ pub fn updateDraft(allocator: std.mem.Allocator, req: *http.Request, res: *http.
     );
 
     res.headers.put("Content-Type", "application/json") catch {};
-    try res.body.appendSlice("{\"message\":\"Draft updated\"}");
+    try res.append("{\"message\":\"Draft updated\"}");
 }
 
 pub fn deleteDraft(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response) !void {
     const user_id = try auth.getUserIdFromRequest(allocator, req) orelse {
         res.status = 401;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Unauthorized\"}");
+        try res.append("{\"error\":\"Unauthorized\"}");
         return;
     };
 
     const draft_id_str = req.params.get("id") orelse {
         res.status = 400;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Missing draft ID\"}");
+        try res.append("{\"error\":\"Missing draft ID\"}");
         return;
     };
 
@@ -188,7 +188,7 @@ pub fn deleteDraft(allocator: std.mem.Allocator, req: *http.Request, res: *http.
         std.log.err("Failed to check ownership: {}", .{err});
         res.status = 500;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Failed to check ownership\"}");
+        try res.append("{\"error\":\"Failed to check ownership\"}");
         return;
     };
     defer db.freeRows(UserIdRow, allocator, check_rows);
@@ -196,19 +196,19 @@ pub fn deleteDraft(allocator: std.mem.Allocator, req: *http.Request, res: *http.
     if (check_rows.len == 0) {
         res.status = 404;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Draft not found\"}");
+        try res.append("{\"error\":\"Draft not found\"}");
         return;
     }
 
     if (check_rows[0].user_id != user_id) {
         res.status = 403;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Not authorized\"}");
+        try res.append("{\"error\":\"Not authorized\"}");
         return;
     }
 
     try db.execute("DELETE FROM drafts WHERE id = ?", &[_][]const u8{draft_id_str});
 
     res.headers.put("Content-Type", "application/json") catch {};
-    try res.body.appendSlice("{\"message\":\"Draft deleted\"}");
+    try res.append("{\"message\":\"Draft deleted\"}");
 }

@@ -121,10 +121,10 @@ const HttpResponseBody = struct {
 
 pub fn getProviders(_: std.mem.Allocator, _: *http.Request, res: *http.Response) !void {
     res.headers.put("Content-Type", "application/json") catch {};
-    try res.body.appendSlice("{\"providers\":[");
+    try res.append("{\"providers\":[");
     for (providers, 0..) |provider, idx| {
-        if (idx > 0) try res.body.appendSlice(",");
-        try res.body.writer().print(
+        if (idx > 0) try res.append(",");
+        try res.bodyWriter().print(
             "{{\"id\":\"{s}\",\"label\":\"{s}\",\"description\":\"{s}\",\"default_model\":\"{s}\",\"supports_custom_base_url\":{s}}}",
             .{
                 provider.id,
@@ -135,7 +135,7 @@ pub fn getProviders(_: std.mem.Allocator, _: *http.Request, res: *http.Response)
             },
         );
     }
-    try res.body.appendSlice("]}");
+    try res.append("]}");
 }
 
 pub fn getConfigs(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response) !void {
@@ -144,9 +144,9 @@ pub fn getConfigs(allocator: std.mem.Allocator, req: *http.Request, res: *http.R
     defer db.freeRows(ConfigRow, allocator, rows);
 
     res.headers.put("Content-Type", "application/json") catch {};
-    try res.body.appendSlice("{\"configs\":[");
+    try res.append("{\"configs\":[");
     for (rows, 0..) |row, idx| {
-        if (idx > 0) try res.body.appendSlice(",");
+        if (idx > 0) try res.append(",");
         const masked = try maskApiKey(allocator, row.api_key);
         defer allocator.free(masked);
         const escaped_provider = try json_utils.escapeJson(allocator, row.provider);
@@ -158,7 +158,7 @@ pub fn getConfigs(allocator: std.mem.Allocator, req: *http.Request, res: *http.R
         const escaped_updated_at = try json_utils.escapeJson(allocator, row.updated_at);
         defer allocator.free(escaped_updated_at);
 
-        try res.body.writer().print(
+        try res.bodyWriter().print(
             "{{\"provider\":\"{s}\",\"configured\":true,\"masked_api_key\":\"{s}\",\"model\":\"{s}\",\"is_default\":{s},\"updated_at\":\"{s}\"",
             .{
                 escaped_provider,
@@ -171,11 +171,11 @@ pub fn getConfigs(allocator: std.mem.Allocator, req: *http.Request, res: *http.R
         if (row.base_url) |base_url| {
             const escaped_base_url = try json_utils.escapeJson(allocator, base_url);
             defer allocator.free(escaped_base_url);
-            try res.body.writer().print(",\"base_url\":\"{s}\"", .{escaped_base_url});
+            try res.bodyWriter().print(",\"base_url\":\"{s}\"", .{escaped_base_url});
         }
-        try res.body.appendSlice("}");
+        try res.append("}");
     }
-    try res.body.appendSlice("]}");
+    try res.append("]}");
 }
 
 pub fn updateConfig(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response) !void {
@@ -183,13 +183,13 @@ pub fn updateConfig(allocator: std.mem.Allocator, req: *http.Request, res: *http
     const provider_id = req.params.get("provider") orelse {
         res.status = 400;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Provider required\"}");
+        try res.append("{\"error\":\"Provider required\"}");
         return;
     };
     const provider = providerFromId(provider_id) orelse {
         res.status = 404;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Unsupported provider\"}");
+        try res.append("{\"error\":\"Unsupported provider\"}");
         return;
     };
 
@@ -214,7 +214,7 @@ pub fn updateConfig(allocator: std.mem.Allocator, req: *http.Request, res: *http
     if (trimmed_base_url != null and !provider.allow_custom_base_url) {
         res.status = 400;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"This provider does not support a custom base URL\"}");
+        try res.append("{\"error\":\"This provider does not support a custom base URL\"}");
         return;
     }
 
@@ -228,7 +228,7 @@ pub fn updateConfig(allocator: std.mem.Allocator, req: *http.Request, res: *http
     if (final_api_key == null) {
         res.status = 400;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"API key is required\"}");
+        try res.append("{\"error\":\"API key is required\"}");
         return;
     }
 
@@ -257,7 +257,7 @@ pub fn updateConfig(allocator: std.mem.Allocator, req: *http.Request, res: *http
         db.execute("UPDATE llm_provider_configs SET is_default = 0 WHERE user_id = ?", &[_][]const u8{user_id_str}) catch {
             res.status = 500;
             res.headers.put("Content-Type", "application/json") catch {};
-            try res.body.appendSlice("{\"error\":\"Failed to update default provider\"}");
+            try res.append("{\"error\":\"Failed to update default provider\"}");
             return;
         };
     }
@@ -277,7 +277,7 @@ pub fn updateConfig(allocator: std.mem.Allocator, req: *http.Request, res: *http
         }) catch {
             res.status = 500;
             res.headers.put("Content-Type", "application/json") catch {};
-            try res.body.appendSlice("{\"error\":\"Failed to save provider config\"}");
+            try res.append("{\"error\":\"Failed to save provider config\"}");
             return;
         };
     } else {
@@ -293,13 +293,13 @@ pub fn updateConfig(allocator: std.mem.Allocator, req: *http.Request, res: *http
         }) catch {
             res.status = 500;
             res.headers.put("Content-Type", "application/json") catch {};
-            try res.body.appendSlice("{\"error\":\"Failed to save provider config\"}");
+            try res.append("{\"error\":\"Failed to save provider config\"}");
             return;
         };
     }
 
     res.headers.put("Content-Type", "application/json") catch {};
-    try res.body.appendSlice("{\"saved\":true}");
+    try res.append("{\"saved\":true}");
 }
 
 pub fn deleteConfig(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response) !void {
@@ -307,7 +307,7 @@ pub fn deleteConfig(allocator: std.mem.Allocator, req: *http.Request, res: *http
     const provider_id = req.params.get("provider") orelse {
         res.status = 400;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Provider required\"}");
+        try res.append("{\"error\":\"Provider required\"}");
         return;
     };
 
@@ -317,7 +317,7 @@ pub fn deleteConfig(allocator: std.mem.Allocator, req: *http.Request, res: *http
     if (existing == null) {
         res.status = 404;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Provider config not found\"}");
+        try res.append("{\"error\":\"Provider config not found\"}");
         return;
     }
 
@@ -331,7 +331,7 @@ pub fn deleteConfig(allocator: std.mem.Allocator, req: *http.Request, res: *http
     ) catch {
         res.status = 500;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Failed to delete provider config\"}");
+        try res.append("{\"error\":\"Failed to delete provider config\"}");
         return;
     };
 
@@ -347,7 +347,7 @@ pub fn deleteConfig(allocator: std.mem.Allocator, req: *http.Request, res: *http
     }
 
     res.headers.put("Content-Type", "application/json") catch {};
-    try res.body.appendSlice("{\"deleted\":true}");
+    try res.append("{\"deleted\":true}");
 }
 
 pub fn revealConfig(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response) !void {
@@ -355,7 +355,7 @@ pub fn revealConfig(allocator: std.mem.Allocator, req: *http.Request, res: *http
     const provider_id = req.params.get("provider") orelse {
         res.status = 400;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Provider required\"}");
+        try res.append("{\"error\":\"Provider required\"}");
         return;
     };
 
@@ -365,7 +365,7 @@ pub fn revealConfig(allocator: std.mem.Allocator, req: *http.Request, res: *http
     if (rows == null) {
         res.status = 404;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Provider config not found\"}");
+        try res.append("{\"error\":\"Provider config not found\"}");
         return;
     }
 
@@ -373,7 +373,7 @@ pub fn revealConfig(allocator: std.mem.Allocator, req: *http.Request, res: *http
     defer allocator.free(escaped_key);
 
     res.headers.put("Content-Type", "application/json") catch {};
-    try res.body.writer().print("{{\"provider\":\"{s}\",\"api_key\":\"{s}\"}}", .{ provider_id, escaped_key });
+    try res.bodyWriter().print("{{\"provider\":\"{s}\",\"api_key\":\"{s}\"}}", .{ provider_id, escaped_key });
 }
 
 pub fn chat(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response) !void {
@@ -382,7 +382,7 @@ pub fn chat(allocator: std.mem.Allocator, req: *http.Request, res: *http.Respons
     const parsed = std.json.parseFromSlice(ChatRequest, allocator, req.body, .{}) catch {
         res.status = 400;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Invalid chat request\"}");
+        try res.append("{\"error\":\"Invalid chat request\"}");
         return;
     };
     defer parsed.deinit();
@@ -391,7 +391,7 @@ pub fn chat(allocator: std.mem.Allocator, req: *http.Request, res: *http.Respons
     if (body.messages.len == 0) {
         res.status = 400;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"At least one message is required\"}");
+        try res.append("{\"error\":\"At least one message is required\"}");
         return;
     }
 
@@ -402,13 +402,13 @@ pub fn chat(allocator: std.mem.Allocator, req: *http.Request, res: *http.Respons
         {
             res.status = 400;
             res.headers.put("Content-Type", "application/json") catch {};
-            try res.body.appendSlice("{\"error\":\"Invalid message role\"}");
+            try res.append("{\"error\":\"Invalid message role\"}");
             return;
         }
         if (std.mem.trim(u8, message.content, " \n\r\t").len == 0) {
             res.status = 400;
             res.headers.put("Content-Type", "application/json") catch {};
-            try res.body.appendSlice("{\"error\":\"Message content cannot be empty\"}");
+            try res.append("{\"error\":\"Message content cannot be empty\"}");
             return;
         }
     }
@@ -422,7 +422,7 @@ pub fn chat(allocator: std.mem.Allocator, req: *http.Request, res: *http.Respons
         owned_provider_id = try getDefaultProviderId(allocator, user_id) orelse {
             res.status = 400;
             res.headers.put("Content-Type", "application/json") catch {};
-            try res.body.appendSlice("{\"error\":\"Configure an AI provider in Settings first\"}");
+            try res.append("{\"error\":\"Configure an AI provider in Settings first\"}");
             return;
         };
         break :blk owned_provider_id.?;
@@ -434,14 +434,14 @@ pub fn chat(allocator: std.mem.Allocator, req: *http.Request, res: *http.Respons
     if (config_rows == null) {
         res.status = 404;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Selected provider is not configured\"}");
+        try res.append("{\"error\":\"Selected provider is not configured\"}");
         return;
     }
 
     const provider = providerFromId(provider_id) orelse {
         res.status = 404;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Unsupported provider\"}");
+        try res.append("{\"error\":\"Unsupported provider\"}");
         return;
     };
 
@@ -494,7 +494,7 @@ pub fn chat(allocator: std.mem.Allocator, req: *http.Request, res: *http.Respons
         defer allocator.free(error_message);
         const escaped_error = try json_utils.escapeJson(allocator, error_message);
         defer allocator.free(escaped_error);
-        try res.body.writer().print("{{\"error\":\"{s}\"}}", .{escaped_error});
+        try res.bodyWriter().print("{{\"error\":\"{s}\"}}", .{escaped_error});
         return;
     };
 
@@ -506,7 +506,7 @@ pub fn chat(allocator: std.mem.Allocator, req: *http.Request, res: *http.Respons
             res.headers.put("Content-Type", "application/json") catch {};
             const escaped_error = try json_utils.escapeJson(allocator, value);
             defer allocator.free(escaped_error);
-            try res.body.writer().print("{{\"error\":\"{s}\"}}", .{escaped_error});
+            try res.bodyWriter().print("{{\"error\":\"{s}\"}}", .{escaped_error});
             return;
         },
     };
@@ -520,7 +520,7 @@ pub fn chat(allocator: std.mem.Allocator, req: *http.Request, res: *http.Respons
     defer allocator.free(escaped_reply);
 
     res.headers.put("Content-Type", "application/json") catch {};
-    try res.body.writer().print(
+    try res.bodyWriter().print(
         "{{\"provider\":\"{s}\",\"model\":\"{s}\",\"reply\":\"{s}\"}}",
         .{ escaped_provider, escaped_model, escaped_reply },
     );
@@ -530,7 +530,7 @@ fn requireUserId(allocator: std.mem.Allocator, req: *http.Request, res: *http.Re
     const user_id = try auth.getUserIdFromRequest(allocator, req) orelse {
         res.status = 401;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Unauthorized\"}");
+        try res.append("{\"error\":\"Unauthorized\"}");
         return null;
     };
     return user_id;
@@ -647,27 +647,27 @@ fn sendOpenAiCompatibleRequest(
     system_prompt: []const u8,
     messages: []ChatMessage,
 ) !ProviderCallResult {
-    var body = std.ArrayList(u8).init(allocator);
-    defer body.deinit();
-    try body.appendSlice("{\"model\":");
-    try std.json.stringify(model, .{}, body.writer());
-    try body.appendSlice(",\"messages\":[");
-    try appendMessageObject(body.writer(), "system", system_prompt);
+    var body: std.ArrayListUnmanaged(u8) = .{};
+    defer body.deinit(allocator);
+    try body.appendSlice(allocator, "{\"model\":");
+    try body.writer(allocator).print("{f}", .{std.json.fmt(model, .{})});
+    try body.appendSlice(allocator, ",\"messages\":[");
+    try appendMessageObject(body.writer(allocator), "system", system_prompt);
     for (messages) |message| {
-        try body.appendSlice(",");
-        try appendMessageObject(body.writer(), message.role, message.content);
+        try body.appendSlice(allocator, ",");
+        try appendMessageObject(body.writer(allocator), message.role, message.content);
     }
-    try body.appendSlice("],\"temperature\":0.7}");
+    try body.appendSlice(allocator, "],\"temperature\":0.7}");
 
     const auth_header = try std.fmt.allocPrint(allocator, "Bearer {s}", .{api_key});
     defer allocator.free(auth_header);
 
-    var headers = std.ArrayList(std.http.Header).init(allocator);
-    defer headers.deinit();
-    try headers.append(.{ .name = "Authorization", .value = auth_header });
+    var headers: std.ArrayListUnmanaged(std.http.Header) = .{};
+    defer headers.deinit(allocator);
+    try headers.append(allocator, .{ .name = "Authorization", .value = auth_header });
     if (std.mem.eql(u8, provider.id, "openrouter")) {
-        try headers.append(.{ .name = "HTTP-Referer", .value = "https://xeetapus.local" });
-        try headers.append(.{ .name = "X-Title", .value = "Xeetapus" });
+        try headers.append(allocator, .{ .name = "HTTP-Referer", .value = "https://xeetapus.local" });
+        try headers.append(allocator, .{ .name = "X-Title", .value = "Xeetapus" });
     }
 
     const response = try postJson(allocator, base_url orelse provider.default_endpoint, body.items, headers.items);
@@ -690,27 +690,27 @@ fn sendAnthropicRequest(
     messages: []ChatMessage,
 ) !ProviderCallResult {
     _ = provider;
-    var body = std.ArrayList(u8).init(allocator);
-    defer body.deinit();
-    try body.appendSlice("{\"model\":");
-    try std.json.stringify(model, .{}, body.writer());
-    try body.appendSlice(",\"max_tokens\":1024,\"system\":");
-    try std.json.stringify(system_prompt, .{}, body.writer());
-    try body.appendSlice(",\"messages\":[");
+    var body: std.ArrayListUnmanaged(u8) = .{};
+    defer body.deinit(allocator);
+    try body.appendSlice(allocator, "{\"model\":");
+    try body.writer(allocator).print("{f}", .{std.json.fmt(model, .{})});
+    try body.appendSlice(allocator, ",\"max_tokens\":1024,\"system\":");
+    try body.writer(allocator).print("{f}", .{std.json.fmt(system_prompt, .{})});
+    try body.appendSlice(allocator, ",\"messages\":[");
 
     var first = true;
     for (messages) |message| {
         if (std.mem.eql(u8, message.role, "system")) continue;
-        if (!first) try body.appendSlice(",");
+        if (!first) try body.appendSlice(allocator, ",");
         first = false;
-        try appendMessageObject(body.writer(), message.role, message.content);
+        try appendMessageObject(body.writer(allocator), message.role, message.content);
     }
-    try body.appendSlice("]}");
+    try body.appendSlice(allocator, "]}");
 
-    var headers = std.ArrayList(std.http.Header).init(allocator);
-    defer headers.deinit();
-    try headers.append(.{ .name = "x-api-key", .value = api_key });
-    try headers.append(.{ .name = "anthropic-version", .value = "2023-06-01" });
+    var headers: std.ArrayListUnmanaged(std.http.Header) = .{};
+    defer headers.deinit(allocator);
+    try headers.append(allocator, .{ .name = "x-api-key", .value = api_key });
+    try headers.append(allocator, .{ .name = "anthropic-version", .value = "2023-06-01" });
 
     const response = try postJson(allocator, base_url orelse "https://api.anthropic.com/v1/messages", body.items, headers.items);
     defer allocator.free(response.body);
@@ -737,24 +737,24 @@ fn sendGeminiRequest(
     );
     defer allocator.free(url);
 
-    var body = std.ArrayList(u8).init(allocator);
-    defer body.deinit();
-    try body.appendSlice("{\"systemInstruction\":{\"parts\":[{\"text\":");
-    try std.json.stringify(system_prompt, .{}, body.writer());
-    try body.appendSlice("}]},\"contents\":[");
+    var body: std.ArrayListUnmanaged(u8) = .{};
+    defer body.deinit(allocator);
+    try body.appendSlice(allocator, "{\"systemInstruction\":{\"parts\":[{\"text\":");
+    try body.writer(allocator).print("{f}", .{std.json.fmt(system_prompt, .{})});
+    try body.appendSlice(allocator, "}]},\"contents\":[");
 
     var first = true;
     for (messages) |message| {
         if (std.mem.eql(u8, message.role, "system")) continue;
-        if (!first) try body.appendSlice(",");
+        if (!first) try body.appendSlice(allocator, ",");
         first = false;
         const role = if (std.mem.eql(u8, message.role, "assistant")) "model" else "user";
-        try body.writer().print("{{\"role\":\"{s}\",\"parts\":[{{\"text\":", .{role});
-        try std.json.stringify(message.content, .{}, body.writer());
-        try body.appendSlice("}]}");
-        try body.appendSlice("}");
+        try body.writer(allocator).print("{{\"role\":\"{s}\",\"parts\":[{{\"text\":", .{role});
+        try body.writer(allocator).print("{f}", .{std.json.fmt(message.content, .{})});
+        try body.appendSlice(allocator, "}]}");
+        try body.appendSlice(allocator, "}");
     }
-    try body.appendSlice("],\"generationConfig\":{\"temperature\":0.7}}");
+    try body.appendSlice(allocator, "],\"generationConfig\":{\"temperature\":0.7}}");
 
     const response = try postJson(allocator, url, body.items, &.{});
     defer allocator.free(response.body);
@@ -768,9 +768,9 @@ fn sendGeminiRequest(
 
 fn appendMessageObject(writer: anytype, role: []const u8, content: []const u8) !void {
     try writer.writeAll("{\"role\":");
-    try std.json.stringify(role, .{}, writer);
+    try writer.print("{f}", .{std.json.fmt(role, .{})});
     try writer.writeAll(",\"content\":");
-    try std.json.stringify(content, .{}, writer);
+    try writer.print("{f}", .{std.json.fmt(content, .{})});
     try writer.writeAll("}");
 }
 
@@ -785,10 +785,13 @@ fn postJson(
     var client = std.http.Client{ .allocator = allocator };
     defer client.deinit();
 
-    var response = std.ArrayList(u8).init(allocator);
-    defer response.deinit();
+    var response: std.ArrayListUnmanaged(u8) = .{};
+    defer response.deinit(allocator);
 
     const start_time = std.time.milliTimestamp();
+
+    var body_writer = std.io.Writer.Allocating.init(allocator);
+    defer body_writer.deinit();
 
     const result = client.fetch(.{
         .location = .{ .url = url },
@@ -798,8 +801,7 @@ fn postJson(
             .content_type = .{ .override = "application/json" },
         },
         .extra_headers = extra_headers,
-        .response_storage = .{ .dynamic = &response },
-        .max_append_size = 1024 * 1024,
+        .response_writer = @ptrCast(@constCast(&response.writer(allocator))),
     }) catch |err| {
         const elapsed = std.time.milliTimestamp() - start_time;
         std.log.warn("LLM request failed after {d}ms: {s}", .{ elapsed, @errorName(err) });
@@ -820,7 +822,7 @@ fn postJson(
 
     return .{
         .status = @intFromEnum(result.status),
-        .body = try response.toOwnedSlice(),
+        .body = try response.toOwnedSlice(allocator),
     };
 }
 
@@ -924,17 +926,17 @@ fn valueToText(allocator: std.mem.Allocator, value: std.json.Value) ![]u8 {
     switch (value) {
         .string => |text| return allocator.dupe(u8, text),
         .array => |array| {
-            var result = std.ArrayList(u8).init(allocator);
-            defer result.deinit();
+            var result: std.ArrayListUnmanaged(u8) = .{};
+            defer result.deinit(allocator);
             for (array.items) |item| {
                 const next = valueToText(allocator, item) catch continue;
                 defer allocator.free(next);
                 if (next.len == 0) continue;
-                if (result.items.len > 0) try result.appendSlice("\n\n");
-                try result.appendSlice(next);
+                if (result.items.len > 0) try result.appendSlice(allocator, "\n\n");
+                try result.appendSlice(allocator, next);
             }
             if (result.items.len == 0) return error.ProviderBadResponse;
-            return result.toOwnedSlice();
+            return result.toOwnedSlice(allocator);
         },
         .object => |object| {
             if (object.get("text")) |text_value| {

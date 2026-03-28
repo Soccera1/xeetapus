@@ -40,7 +40,7 @@ pub fn register(allocator: std.mem.Allocator, req: *http.Request, res: *http.Res
     if (security.validation.validateUsername(body.username)) |err_msg| {
         res.status = 400;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.writer().print("{{\"error\":\"{s}\"}}", .{err_msg});
+        try res.bodyWriter().print("{{\"error\":\"{s}\"}}", .{err_msg});
         return;
     }
 
@@ -48,7 +48,7 @@ pub fn register(allocator: std.mem.Allocator, req: *http.Request, res: *http.Res
     if (security.validation.validatePassword(body.password)) |err_msg| {
         res.status = 400;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.writer().print("{{\"error\":\"{s}\"}}", .{err_msg});
+        try res.bodyWriter().print("{{\"error\":\"{s}\"}}", .{err_msg});
         return;
     }
 
@@ -56,7 +56,7 @@ pub fn register(allocator: std.mem.Allocator, req: *http.Request, res: *http.Res
     if (security.validation.validateEmail(body.email)) |err_msg| {
         res.status = 400;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.writer().print("{{\"error\":\"{s}\"}}", .{err_msg});
+        try res.bodyWriter().print("{{\"error\":\"{s}\"}}", .{err_msg});
         return;
     }
 
@@ -74,7 +74,7 @@ pub fn register(allocator: std.mem.Allocator, req: *http.Request, res: *http.Res
     db.execute(sql, &params) catch {
         res.status = 409;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Username or email already exists\"}");
+        try res.append("{\"error\":\"Username or email already exists\"}");
         return;
     };
 
@@ -106,7 +106,7 @@ pub fn register(allocator: std.mem.Allocator, req: *http.Request, res: *http.Res
     const escaped_email = try json_utils.escapeJson(allocator, body.email);
     defer allocator.free(escaped_email);
     const escaped_csrf = try json_utils.escapeJson(allocator, csrf_token);
-    try res.body.writer().print("{{\"id\":{d},\"username\":\"{s}\",\"email\":\"{s}\",\"token\":\"{s}\",\"csrf_token\":\"{s}\"}}", .{ user_id, escaped_username, escaped_email, token, escaped_csrf });
+    try res.bodyWriter().print("{{\"id\":{d},\"username\":\"{s}\",\"email\":\"{s}\",\"token\":\"{s}\",\"csrf_token\":\"{s}\"}}", .{ user_id, escaped_username, escaped_email, token, escaped_csrf });
     allocator.free(escaped_csrf);
     allocator.free(csrf_token);
     // Note: cookie_str and token are stored in response headers and must not be freed here
@@ -131,7 +131,7 @@ pub fn login(allocator: std.mem.Allocator, req: *http.Request, res: *http.Respon
     const rows = db.query(UserWithPassword, allocator, sql, &[_][]const u8{body.username}) catch {
         res.status = 500;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Database error\"}");
+        try res.append("{\"error\":\"Database error\"}");
         return;
     };
     defer db.freeRows(UserWithPassword, allocator, rows);
@@ -141,7 +141,7 @@ pub fn login(allocator: std.mem.Allocator, req: *http.Request, res: *http.Respon
         audit.logAuth(allocator, "login", null, req, false);
         res.status = 401;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Invalid credentials\"}");
+        try res.append("{\"error\":\"Invalid credentials\"}");
         return;
     }
 
@@ -153,7 +153,7 @@ pub fn login(allocator: std.mem.Allocator, req: *http.Request, res: *http.Respon
         audit.logAuth(allocator, "login", user.id, req, false);
         res.status = 401;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Invalid credentials\"}");
+        try res.append("{\"error\":\"Invalid credentials\"}");
         return;
     }
 
@@ -182,7 +182,7 @@ pub fn login(allocator: std.mem.Allocator, req: *http.Request, res: *http.Respon
     const escaped_email2 = try json_utils.escapeJson(allocator, user.email);
     defer allocator.free(escaped_email2);
     const escaped_csrf = try json_utils.escapeJson(allocator, csrf_token);
-    try res.body.writer().print("{{\"id\":{d},\"username\":\"{s}\",\"email\":\"{s}\",\"token\":\"{s}\",\"csrf_token\":\"{s}\"}}", .{ user.id, escaped_username2, escaped_email2, token, escaped_csrf });
+    try res.bodyWriter().print("{{\"id\":{d},\"username\":\"{s}\",\"email\":\"{s}\",\"token\":\"{s}\",\"csrf_token\":\"{s}\"}}", .{ user.id, escaped_username2, escaped_email2, token, escaped_csrf });
     allocator.free(escaped_csrf);
     allocator.free(csrf_token);
     // Note: cookie_str and token are stored in response headers and must not be freed here
@@ -199,14 +199,14 @@ pub fn logout(allocator: std.mem.Allocator, req: *http.Request, res: *http.Respo
     // Log logout
     audit.logAuth(allocator, "logout", user_id, req, true);
 
-    try res.body.appendSlice("{\"message\":\"Logged out successfully\"}");
+    try res.append("{\"message\":\"Logged out successfully\"}");
 }
 
 pub fn me(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response) !void {
     const user_id = try getUserIdFromRequest(allocator, req) orelse {
         res.status = 401;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Unauthorized\"}");
+        try res.append("{\"error\":\"Unauthorized\"}");
         return;
     };
 
@@ -220,7 +220,7 @@ pub fn me(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response)
     if (rows.len == 0) {
         res.status = 404;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"User not found\"}");
+        try res.append("{\"error\":\"User not found\"}");
         return;
     }
 
@@ -238,7 +238,7 @@ pub fn me(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response)
     defer allocator.free(escaped_avatar_url);
     const escaped_created_at = try json_utils.escapeJson(allocator, user.created_at);
     defer allocator.free(escaped_created_at);
-    try res.body.writer().print("{{\"id\":{d},\"username\":\"{s}\",\"email\":\"{s}\",\"display_name\":\"{s}\",\"bio\":\"{s}\",\"avatar_url\":\"{s}\",\"created_at\":\"{s}\"}}", .{ user.id, escaped_username3, escaped_email3, escaped_display_name, escaped_bio, escaped_avatar_url, escaped_created_at });
+    try res.bodyWriter().print("{{\"id\":{d},\"username\":\"{s}\",\"email\":\"{s}\",\"display_name\":\"{s}\",\"bio\":\"{s}\",\"avatar_url\":\"{s}\",\"created_at\":\"{s}\"}}", .{ user.id, escaped_username3, escaped_email3, escaped_display_name, escaped_bio, escaped_avatar_url, escaped_created_at });
 }
 
 pub fn getUserIdFromRequest(allocator: std.mem.Allocator, req: *http.Request) !?i64 {

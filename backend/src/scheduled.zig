@@ -19,7 +19,7 @@ pub fn getScheduledPosts(allocator: std.mem.Allocator, req: *http.Request, res: 
     const user_id = try auth.getUserIdFromRequest(allocator, req) orelse {
         res.status = 401;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Unauthorized\"}");
+        try res.append("{\"error\":\"Unauthorized\"}");
         return;
     };
 
@@ -37,33 +37,33 @@ pub fn getScheduledPosts(allocator: std.mem.Allocator, req: *http.Request, res: 
         std.log.err("Failed to get scheduled posts: {}", .{err});
         res.status = 500;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Failed to get scheduled posts\"}");
+        try res.append("{\"error\":\"Failed to get scheduled posts\"}");
         return;
     };
     defer db.freeRows(ScheduledPost, allocator, rows);
 
     res.headers.put("Content-Type", "application/json") catch {};
-    try res.body.writer().print("{{\"scheduled_posts\":[", .{});
+    try res.bodyWriter().print("{{\"scheduled_posts\":[", .{});
     for (rows, 0..) |row, i| {
-        if (i > 0) try res.body.writer().print(",", .{});
-        try res.body.writer().print("{{\"id\":{d},\"user_id\":{d},\"content\":\"{s}\"", .{
+        if (i > 0) try res.bodyWriter().print(",", .{});
+        try res.bodyWriter().print("{{\"id\":{d},\"user_id\":{d},\"content\":\"{s}\"", .{
             row.id, row.user_id, row.content,
         });
         if (row.media_urls) |urls| {
-            try res.body.writer().print(",\"media_urls\":\"{s}\"", .{urls});
+            try res.bodyWriter().print(",\"media_urls\":\"{s}\"", .{urls});
         }
-        try res.body.writer().print(",\"scheduled_at\":\"{s}\",\"created_at\":\"{s}\",\"is_posted\":{d}}}", .{
+        try res.bodyWriter().print(",\"scheduled_at\":\"{s}\",\"created_at\":\"{s}\",\"is_posted\":{d}}}", .{
             row.scheduled_at, row.created_at, row.is_posted,
         });
     }
-    try res.body.writer().print("]}}", .{});
+    try res.bodyWriter().print("]}}", .{});
 }
 
 pub fn createScheduledPost(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response) !void {
     const user_id = try auth.getUserIdFromRequest(allocator, req) orelse {
         res.status = 401;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Unauthorized\"}");
+        try res.append("{\"error\":\"Unauthorized\"}");
         return;
     };
 
@@ -76,7 +76,7 @@ pub fn createScheduledPost(allocator: std.mem.Allocator, req: *http.Request, res
     }, allocator, body, .{}) catch {
         res.status = 400;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Invalid JSON\"}");
+        try res.append("{\"error\":\"Invalid JSON\"}");
         return;
     };
     defer parsed.deinit();
@@ -95,21 +95,21 @@ pub fn createScheduledPost(allocator: std.mem.Allocator, req: *http.Request, res
     );
 
     res.headers.put("Content-Type", "application/json") catch {};
-    try res.body.writer().print("{{\"id\":{d},\"message\":\"Scheduled post created\"}}", .{db.lastInsertRowId()});
+    try res.bodyWriter().print("{{\"id\":{d},\"message\":\"Scheduled post created\"}}", .{db.lastInsertRowId()});
 }
 
 pub fn deleteScheduledPost(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response) !void {
     const user_id = try auth.getUserIdFromRequest(allocator, req) orelse {
         res.status = 401;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Unauthorized\"}");
+        try res.append("{\"error\":\"Unauthorized\"}");
         return;
     };
 
     const post_id_str = req.params.get("id") orelse {
         res.status = 400;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Missing post ID\"}");
+        try res.append("{\"error\":\"Missing post ID\"}");
         return;
     };
 
@@ -122,7 +122,7 @@ pub fn deleteScheduledPost(allocator: std.mem.Allocator, req: *http.Request, res
         std.log.err("Failed to check ownership: {}", .{err});
         res.status = 500;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Failed to check ownership\"}");
+        try res.append("{\"error\":\"Failed to check ownership\"}");
         return;
     };
     defer db.freeRows(UserIdRow, allocator, check_rows);
@@ -130,19 +130,19 @@ pub fn deleteScheduledPost(allocator: std.mem.Allocator, req: *http.Request, res
     if (check_rows.len == 0) {
         res.status = 404;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Scheduled post not found\"}");
+        try res.append("{\"error\":\"Scheduled post not found\"}");
         return;
     }
 
     if (check_rows[0].user_id != user_id) {
         res.status = 403;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Not authorized\"}");
+        try res.append("{\"error\":\"Not authorized\"}");
         return;
     }
 
     try db.execute("DELETE FROM scheduled_posts WHERE id = ?", &[_][]const u8{post_id_str});
 
     res.headers.put("Content-Type", "application/json") catch {};
-    try res.body.appendSlice("{\"message\":\"Scheduled post deleted\"}");
+    try res.append("{\"message\":\"Scheduled post deleted\"}");
 }

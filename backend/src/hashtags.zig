@@ -23,20 +23,20 @@ pub fn getTrending(allocator: std.mem.Allocator, _: *http.Request, res: *http.Re
         std.log.err("Failed to get trending: {}", .{err});
         res.status = 500;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Failed to get trending\"}");
+        try res.append("{\"error\":\"Failed to get trending\"}");
         return;
     };
     defer db.freeRows(Hashtag, allocator, rows);
 
     res.headers.put("Content-Type", "application/json") catch {};
-    try res.body.writer().print("{{\"trending\":[", .{});
+    try res.bodyWriter().print("{{\"trending\":[", .{});
     for (rows, 0..) |row, i| {
-        if (i > 0) try res.body.writer().print(",", .{});
-        try res.body.writer().print("{{\"id\":{d},\"tag\":\"{s}\",\"use_count\":{d}}}", .{
+        if (i > 0) try res.bodyWriter().print(",", .{});
+        try res.bodyWriter().print("{{\"id\":{d},\"tag\":\"{s}\",\"use_count\":{d}}}", .{
             row.id, row.tag, row.use_count,
         });
     }
-    try res.body.writer().print("]}}", .{});
+    try res.bodyWriter().print("]}}", .{});
 }
 
 pub fn getPostsByHashtag(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response) !void {
@@ -45,7 +45,7 @@ pub fn getPostsByHashtag(allocator: std.mem.Allocator, req: *http.Request, res: 
     const hashtag = req.params.get("tag") orelse {
         res.status = 400;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Missing hashtag\"}");
+        try res.append("{\"error\":\"Missing hashtag\"}");
         return;
     };
 
@@ -93,33 +93,33 @@ pub fn getPostsByHashtag(allocator: std.mem.Allocator, req: *http.Request, res: 
         std.log.err("Failed to get posts by hashtag: {}", .{err});
         res.status = 500;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Failed to get posts\"}");
+        try res.append("{\"error\":\"Failed to get posts\"}");
         return;
     };
     defer db.freeRows(Post, allocator, rows);
 
     res.headers.put("Content-Type", "application/json") catch {};
-    try res.body.writer().print("{{\"hashtag\":\"{s}\",\"posts\":[", .{hashtag});
+    try res.bodyWriter().print("{{\"hashtag\":\"{s}\",\"posts\":[", .{hashtag});
     for (rows, 0..) |row, i| {
-        if (i > 0) try res.body.writer().print(",", .{});
-        try res.body.writer().print("{{\"id\":{d},\"user_id\":{d},\"username\":\"{s}\"", .{
+        if (i > 0) try res.bodyWriter().print(",", .{});
+        try res.bodyWriter().print("{{\"id\":{d},\"user_id\":{d},\"username\":\"{s}\"", .{
             row.id, row.user_id, row.username,
         });
         if (row.display_name) |name| {
-            try res.body.writer().print(",\"display_name\":\"{s}\"", .{name});
+            try res.bodyWriter().print(",\"display_name\":\"{s}\"", .{name});
         }
         if (row.avatar_url) |url| {
-            try res.body.writer().print(",\"avatar_url\":\"{s}\"", .{url});
+            try res.bodyWriter().print(",\"avatar_url\":\"{s}\"", .{url});
         }
-        try res.body.writer().print(",\"content\":\"{s}\"", .{row.content});
+        try res.bodyWriter().print(",\"content\":\"{s}\"", .{row.content});
         if (row.media_urls) |urls| {
-            try res.body.writer().print(",\"media_urls\":\"{s}\"", .{urls});
+            try res.bodyWriter().print(",\"media_urls\":\"{s}\"", .{urls});
         }
-        try res.body.writer().print(",\"created_at\":\"{s}\",\"likes_count\":{d},\"comments_count\":{d},\"reposts_count\":{d},\"is_liked\":{d},\"is_reposted\":{d}}}", .{
+        try res.bodyWriter().print(",\"created_at\":\"{s}\",\"likes_count\":{d},\"comments_count\":{d},\"reposts_count\":{d},\"is_liked\":{d},\"is_reposted\":{d}}}", .{
             row.created_at, row.likes_count, row.comments_count, row.reposts_count, row.is_liked, row.is_reposted,
         });
     }
-    try res.body.writer().print("]}}", .{});
+    try res.bodyWriter().print("]}}", .{});
 }
 
 pub fn extractAndSaveHashtags(allocator: std.mem.Allocator, post_id: i64, content: []const u8) !void {

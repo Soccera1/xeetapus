@@ -26,7 +26,7 @@ pub fn upload(allocator: std.mem.Allocator, req: *http.Request, res: *http.Respo
     const user_id = try auth.getUserIdFromRequest(allocator, req) orelse {
         res.status = 401;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Unauthorized\"}");
+        try res.append("{\"error\":\"Unauthorized\"}");
         return;
     };
 
@@ -34,7 +34,7 @@ pub fn upload(allocator: std.mem.Allocator, req: *http.Request, res: *http.Respo
     const username = try getUsernameById(allocator, user_id) orelse {
         res.status = 404;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"User not found\"}");
+        try res.append("{\"error\":\"User not found\"}");
         return;
     };
     defer allocator.free(username);
@@ -43,7 +43,7 @@ pub fn upload(allocator: std.mem.Allocator, req: *http.Request, res: *http.Respo
     const content_type = req.headers.get("content-type") orelse {
         res.status = 400;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Missing Content-Type header\"}");
+        try res.append("{\"error\":\"Missing Content-Type header\"}");
         return;
     };
 
@@ -52,7 +52,7 @@ pub fn upload(allocator: std.mem.Allocator, req: *http.Request, res: *http.Respo
     const boundary_start = std.mem.indexOf(u8, content_type, boundary_prefix) orelse {
         res.status = 400;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Invalid Content-Type header\"}");
+        try res.append("{\"error\":\"Invalid Content-Type header\"}");
         return;
     };
     const boundary = content_type[boundary_start + boundary_prefix.len ..];
@@ -64,7 +64,7 @@ pub fn upload(allocator: std.mem.Allocator, req: *http.Request, res: *http.Respo
     if (parsed.file_data == null) {
         res.status = 400;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"No file provided\"}");
+        try res.append("{\"error\":\"No file provided\"}");
         return;
     }
 
@@ -75,7 +75,7 @@ pub fn upload(allocator: std.mem.Allocator, req: *http.Request, res: *http.Respo
     if (file_data.len > MAX_FILE_SIZE) {
         res.status = 413;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"File too large\"}");
+        try res.append("{\"error\":\"File too large\"}");
         return;
     }
 
@@ -87,7 +87,7 @@ pub fn upload(allocator: std.mem.Allocator, req: *http.Request, res: *http.Respo
     if (!isValidExtension(extension)) {
         res.status = 400;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Invalid file type\"}");
+        try res.append("{\"error\":\"Invalid file type\"}");
         return;
     }
 
@@ -99,7 +99,7 @@ pub fn upload(allocator: std.mem.Allocator, req: *http.Request, res: *http.Respo
         std.log.err("Failed to create directory {s}: {s}", .{ user_dir, @errorName(err) });
         res.status = 500;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Failed to create directory\"}");
+        try res.append("{\"error\":\"Failed to create directory\"}");
         return;
     };
 
@@ -119,7 +119,7 @@ pub fn upload(allocator: std.mem.Allocator, req: *http.Request, res: *http.Respo
         std.log.err("Failed to create file {s}: {s}", .{ file_path, @errorName(err) });
         res.status = 500;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Failed to save file\"}");
+        try res.append("{\"error\":\"Failed to save file\"}");
         return;
     };
     defer file.close();
@@ -128,7 +128,7 @@ pub fn upload(allocator: std.mem.Allocator, req: *http.Request, res: *http.Respo
         std.log.err("Failed to write file {s}: {s}", .{ file_path, @errorName(err) });
         res.status = 500;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Failed to write file\"}");
+        try res.append("{\"error\":\"Failed to write file\"}");
         return;
     };
 
@@ -149,7 +149,7 @@ pub fn upload(allocator: std.mem.Allocator, req: *http.Request, res: *http.Respo
     }
 
     res.headers.put("Content-Type", "application/json") catch {};
-    try res.body.writer().print("{{\"url\":\"{s}\",\"filename\":\"{s}\"}}", .{ public_url, filename });
+    try res.bodyWriter().print("{{\"url\":\"{s}\",\"filename\":\"{s}\"}}", .{ public_url, filename });
 }
 
 fn getUsernameById(allocator: std.mem.Allocator, user_id: i64) !?[]const u8 {
@@ -263,14 +263,14 @@ pub fn serveMedia(allocator: std.mem.Allocator, req: *http.Request, res: *http.R
     const path_param = req.params.get("path") orelse {
         res.status = 400;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Invalid path\"}");
+        try res.append("{\"error\":\"Invalid path\"}");
         return;
     };
 
     const slash_idx = std.mem.indexOf(u8, path_param, "/") orelse {
         res.status = 400;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Invalid path\"}");
+        try res.append("{\"error\":\"Invalid path\"}");
         return;
     };
 
@@ -287,7 +287,7 @@ pub fn serveMedia(allocator: std.mem.Allocator, req: *http.Request, res: *http.R
     {
         res.status = 403;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Forbidden\"}");
+        try res.append("{\"error\":\"Forbidden\"}");
         return;
     }
 
@@ -300,12 +300,12 @@ pub fn serveMedia(allocator: std.mem.Allocator, req: *http.Request, res: *http.R
         if (err == std.fs.File.OpenError.FileNotFound) {
             res.status = 404;
             res.headers.put("Content-Type", "application/json") catch {};
-            try res.body.appendSlice("{\"error\":\"File not found\"}");
+            try res.append("{\"error\":\"File not found\"}");
             return;
         }
         res.status = 500;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Failed to open file\"}");
+        try res.append("{\"error\":\"Failed to open file\"}");
         return;
     };
     defer file.close();
@@ -320,7 +320,7 @@ pub fn serveMedia(allocator: std.mem.Allocator, req: *http.Request, res: *http.R
     if (stat.size > MAX_FILE_SIZE) {
         res.status = 413;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"File too large\"}");
+        try res.append("{\"error\":\"File too large\"}");
         return;
     }
 
@@ -336,7 +336,7 @@ pub fn serveMedia(allocator: std.mem.Allocator, req: *http.Request, res: *http.R
     const content_type = getContentType(extension);
 
     res.headers.put("Content-Type", content_type) catch {};
-    try res.body.appendSlice(content);
+    try res.append(content);
 }
 
 fn getContentType(ext: []const u8) []const u8 {

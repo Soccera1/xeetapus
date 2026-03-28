@@ -26,30 +26,38 @@ pub const Request = struct {
 pub const Response = struct {
     status: u16 = 200,
     headers: std.StringHashMap([]const u8),
-    body: std.ArrayList(u8),
+    body: std.ArrayListUnmanaged(u8),
     allocator: std.mem.Allocator,
 
     pub fn init(allocator: std.mem.Allocator) Response {
         return .{
             .headers = std.StringHashMap([]const u8).init(allocator),
-            .body = std.ArrayList(u8).init(allocator),
+            .body = .{},
             .allocator = allocator,
         };
     }
 
     pub fn deinit(self: *Response) void {
         self.headers.deinit();
-        self.body.deinit();
+        self.body.deinit(self.allocator);
     }
 
     pub fn json(self: *Response, data: anytype) !void {
         self.headers.put("Content-Type", "application/json") catch {};
-        try std.json.stringify(data, .{}, self.body.writer());
+        try std.json.stringify(data, .{}, self.body.writer(self.allocator));
     }
 
     pub fn text(self: *Response, content: []const u8) !void {
         self.headers.put("Content-Type", "text/plain") catch {};
-        try self.body.appendSlice(content);
+        try self.body.appendSlice(self.allocator, content);
+    }
+
+    pub fn append(self: *Response, slice: []const u8) !void {
+        try self.body.appendSlice(self.allocator, slice);
+    }
+
+    pub fn bodyWriter(self: *Response) std.array_list.Aligned(u8, null).Writer {
+        return self.body.writer(self.allocator);
     }
 
     /// Add security headers to response
@@ -79,7 +87,9 @@ pub const Response = struct {
     }
 
     pub fn send(self: *Response, stream: net.Stream, request_origin: ?[]const u8) !void {
-        const writer = stream.writer();
+        var write_buffer: [1024]u8 = undefined;
+        var stream_writer = stream.writer(&write_buffer);
+        const writer = &stream_writer.interface;
 
         // Status line
         const status_text = switch (self.status) {
@@ -135,19 +145,19 @@ pub const Route = struct {
     method: []const u8,
     path: []const u8,
     handler: Handler,
-    segments: std.ArrayList([]const u8),
+    segments: std.ArrayListUnmanaged([]const u8),
     has_params: bool,
     require_auth: bool,
     rate_limit: bool,
 
     pub fn init(allocator: std.mem.Allocator, method: []const u8, path: []const u8, handler: Handler, require_auth: bool, rate_limit: bool) !Route {
-        var segments = std.ArrayList([]const u8).init(allocator);
+        var segments: std.ArrayListUnmanaged([]const u8) = .{};
         var has_params = false;
 
         var it = std.mem.splitScalar(u8, path, '/');
         while (it.next()) |segment| {
             if (segment.len == 0) continue;
-            try segments.append(segment);
+            try segments.append(allocator, segment);
             if (segment[0] == ':' or std.mem.eql(u8, segment, "*")) {
                 has_params = true;
             }
@@ -164,18 +174,18 @@ pub const Route = struct {
         };
     }
 
-    pub fn deinit(self: *Route) void {
-        self.segments.deinit();
+    pub fn deinit(self: *Route, allocator: std.mem.Allocator) void {
+        self.segments.deinit(allocator);
     }
 
     pub fn matches(self: Route, request_path: []const u8, params: *std.StringHashMap([]const u8)) !bool {
-        var req_segments = std.ArrayList([]const u8).init(params.allocator);
-        defer req_segments.deinit();
+        var req_segments: std.ArrayListUnmanaged([]const u8) = .{};
+        defer req_segments.deinit(params.allocator);
 
         var it = std.mem.splitScalar(u8, request_path, '/');
         while (it.next()) |segment| {
             if (segment.len == 0) continue;
-            try req_segments.append(segment);
+            try req_segments.append(params.allocator, segment);
         }
 
         // Check for wildcard route (last segment is *)
@@ -228,7 +238,7 @@ pub const Route = struct {
 pub const Server = struct {
     allocator: std.mem.Allocator,
     port: u16,
-    routes: std.ArrayList(Route),
+    routes: std.ArrayListUnmanaged(Route),
     rate_limiter: ratelimit.RateLimiter,
     max_request_size: usize,
     is_production: bool,
@@ -239,7 +249,7 @@ pub const Server = struct {
             return .{
                 .allocator = allocator,
                 .port = port,
-                .routes = std.ArrayList(Route).init(allocator),
+                .routes = .{},
                 .rate_limiter = ratelimit.RateLimiter.init(allocator, 100, 60),
                 .max_request_size = 1024 * 1024, // 1MB default
                 .is_production = false,
@@ -249,7 +259,7 @@ pub const Server = struct {
         return .{
             .allocator = allocator,
             .port = port,
-            .routes = std.ArrayList(Route).init(allocator),
+            .routes = .{},
             .rate_limiter = ratelimit.RateLimiter.init(allocator, cfg.rate_limit_requests, cfg.rate_limit_window_seconds),
             .max_request_size = cfg.max_request_size,
             .is_production = config.isProduction(),
@@ -257,7 +267,10 @@ pub const Server = struct {
     }
 
     pub fn deinit(self: *Server) void {
-        self.routes.deinit();
+        for (self.routes.items) |*route| {
+            route.deinit(self.allocator);
+        }
+        self.routes.deinit(self.allocator);
         self.rate_limiter.deinit();
     }
 
@@ -269,12 +282,12 @@ pub const Server = struct {
         const rate_limit = true;
 
         const route = try Route.init(self.allocator, method, path, handler, require_auth, rate_limit);
-        try self.routes.append(route);
+        try self.routes.append(self.allocator, route);
     }
 
     pub fn addPublicRoute(self: *Server, method: []const u8, path: []const u8, handler: Handler) !void {
         const route = try Route.init(self.allocator, method, path, handler, false, true);
-        try self.routes.append(route);
+        try self.routes.append(self.allocator, route);
     }
 
     pub fn addUnlimitedRoute(self: *Server, method: []const u8, path: []const u8, handler: Handler) !void {
@@ -282,14 +295,13 @@ pub const Server = struct {
             std.mem.eql(u8, method, "PUT") or
             std.mem.eql(u8, method, "DELETE");
         const route = try Route.init(self.allocator, method, path, handler, require_auth, false);
-        try self.routes.append(route);
+        try self.routes.append(self.allocator, route);
     }
 
     pub fn start(self: *Server) !void {
         const address = try net.Address.parseIp4("0.0.0.0", self.port);
         var listener = try net.Address.listen(address, .{
             .reuse_address = true,
-            .reuse_port = true,
         });
         defer listener.deinit();
 
@@ -321,7 +333,7 @@ pub const Server = struct {
             defer res.deinit();
             res.status = 413; // Payload Too Large
             res.headers.put("Content-Type", "text/plain") catch {};
-            res.body.appendSlice("Request entity too large") catch {};
+            res.append("Request entity too large") catch {};
             res.addSecurityHeaders(self.is_production);
             res.send(connection.stream, null) catch |err| {
                 std.log.debug("Failed to send 413 response: {s}", .{@errorName(err)});
@@ -360,7 +372,7 @@ pub const Server = struct {
 
         const allowed = self.rate_limiter.check(rate_key) catch {
             res.status = 500;
-            res.body.appendSlice("Rate limiter error") catch {};
+            res.append("Rate limiter error") catch {};
             res.send(connection.stream, origin) catch |err| {
                 std.log.debug("Failed to send rate limiter error: {s}", .{@errorName(err)});
             };
@@ -377,7 +389,7 @@ pub const Server = struct {
             res.headers.put("X-RateLimit-Remaining", "0") catch {};
             res.headers.put("X-RateLimit-Reset", std.fmt.bufPrint(&reset_buf, "{d}", .{status.reset_time}) catch "0") catch {};
             res.headers.put("Retry-After", std.fmt.bufPrint(&retry_buf, "{d}", .{status.reset_time - std.time.timestamp()}) catch "60") catch {};
-            res.body.appendSlice("{\"error\":\"Rate limit exceeded\"}") catch {};
+            res.append("{\"error\":\"Rate limit exceeded\"}") catch {};
             res.send(connection.stream, origin) catch |err| {
                 std.log.debug("Failed to send rate limit response: {s}", .{@errorName(err)});
             };
@@ -436,7 +448,7 @@ pub const Server = struct {
                 res.status = 500;
                 const error_response = "{\"error\":\"Internal Server Error\"}";
                 res.headers.put("Content-Type", "application/json") catch {};
-                res.body.appendSlice(error_response) catch {};
+                res.append(error_response) catch {};
             };
             found = true;
         }
@@ -445,7 +457,7 @@ pub const Server = struct {
             res.status = 404;
             const error_response = "{\"error\":\"Not Found\"}";
             res.headers.put("Content-Type", "application/json") catch {};
-            res.body.appendSlice(error_response) catch {};
+            res.append(error_response) catch {};
         }
 
         res.send(connection.stream, origin) catch |err| {

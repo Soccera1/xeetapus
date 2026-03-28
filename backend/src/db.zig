@@ -429,15 +429,15 @@ pub fn query(comptime T: type, allocator: std.mem.Allocator, sql: []const u8, pa
         _ = c.sqlite3_bind_text(stmt, @intCast(i + 1), param.ptr, @intCast(param.len), c.SQLITE_STATIC);
     }
 
-    var rows = std.ArrayList(T).init(allocator);
-    errdefer rows.deinit();
+    var rows: std.ArrayListUnmanaged(T) = .{};
+    errdefer rows.deinit(allocator);
 
     while (c.sqlite3_step(stmt) == c.SQLITE_ROW) {
         const row = try rowToStruct(T, allocator, stmt.?);
-        try rows.append(row);
+        try rows.append(allocator, row);
     }
 
-    return rows.toOwnedSlice();
+    return rows.toOwnedSlice(allocator);
 }
 
 fn rowToStruct(comptime T: type, allocator: std.mem.Allocator, stmt: *c.sqlite3_stmt) !T {

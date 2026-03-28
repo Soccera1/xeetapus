@@ -44,7 +44,7 @@ pub fn getPostViews(allocator: std.mem.Allocator, req: *http.Request, res: *http
     const post_id_str = req.params.get("id") orelse {
         res.status = 400;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Missing post ID\"}");
+        try res.append("{\"error\":\"Missing post ID\"}");
         return;
     };
 
@@ -53,21 +53,21 @@ pub fn getPostViews(allocator: std.mem.Allocator, req: *http.Request, res: *http
         std.log.err("Failed to get view count: {}", .{err});
         res.status = 500;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Failed to get view count\"}");
+        try res.append("{\"error\":\"Failed to get view count\"}");
         return;
     };
     defer db.freeRows(CountRow, allocator, rows);
 
     const count = if (rows.len > 0) rows[0].count else 0;
     res.headers.put("Content-Type", "application/json") catch {};
-    try res.body.writer().print("{{\"view_count\":{d}}}", .{count});
+    try res.bodyWriter().print("{{\"view_count\":{d}}}", .{count});
 }
 
 pub fn getUserAnalytics(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response) !void {
     const user_id = try auth.getUserIdFromRequest(allocator, req) orelse {
         res.status = 401;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Unauthorized\"}");
+        try res.append("{\"error\":\"Unauthorized\"}");
         return;
     };
 
@@ -85,7 +85,7 @@ pub fn getUserAnalytics(allocator: std.mem.Allocator, req: *http.Request, res: *
         std.log.err("Failed to get views: {}", .{err});
         res.status = 500;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Failed to get analytics\"}");
+        try res.append("{\"error\":\"Failed to get analytics\"}");
         return;
     };
     defer db.freeRows(TotalViewsRow, allocator, views_rows);
@@ -96,7 +96,7 @@ pub fn getUserAnalytics(allocator: std.mem.Allocator, req: *http.Request, res: *
         std.log.err("Failed to get post count: {}", .{err});
         res.status = 500;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Failed to get analytics\"}");
+        try res.append("{\"error\":\"Failed to get analytics\"}");
         return;
     };
     defer db.freeRows(CountRow, allocator, posts_rows);
@@ -112,7 +112,7 @@ pub fn getUserAnalytics(allocator: std.mem.Allocator, req: *http.Request, res: *
         std.log.err("Failed to get likes: {}", .{err});
         res.status = 500;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Failed to get analytics\"}");
+        try res.append("{\"error\":\"Failed to get analytics\"}");
         return;
     };
     defer db.freeRows(CountRow, allocator, likes_rows);
@@ -128,13 +128,13 @@ pub fn getUserAnalytics(allocator: std.mem.Allocator, req: *http.Request, res: *
         std.log.err("Failed to get reposts: {}", .{err});
         res.status = 500;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Failed to get analytics\"}");
+        try res.append("{\"error\":\"Failed to get analytics\"}");
         return;
     };
     defer db.freeRows(CountRow, allocator, reposts_rows);
 
     res.headers.put("Content-Type", "application/json") catch {};
-    try res.body.writer().print("{{\"total_views\":{d},\"total_posts\":{d},\"total_likes_received\":{d},\"total_reposts_received\":{d}}}", .{
+    try res.bodyWriter().print("{{\"total_views\":{d},\"total_posts\":{d},\"total_likes_received\":{d},\"total_reposts_received\":{d}}}", .{
         if (views_rows.len > 0) views_rows[0].total_views else 0,
         if (posts_rows.len > 0) posts_rows[0].count else 0,
         if (likes_rows.len > 0) likes_rows[0].count else 0,

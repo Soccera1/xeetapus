@@ -56,14 +56,14 @@ pub const Config = struct {
         };
         errdefer allocator.free(origins_str);
 
-        var origins_list = std.ArrayList([]const u8).init(allocator);
-        errdefer origins_list.deinit();
+        var origins_list: std.ArrayListUnmanaged([]const u8) = .{};
+        errdefer origins_list.deinit(allocator);
 
         var it = std.mem.splitScalar(u8, origins_str, ',');
         while (it.next()) |origin| {
             const trimmed = std.mem.trim(u8, origin, " ");
             if (trimmed.len > 0) {
-                try origins_list.append(try allocator.dupe(u8, trimmed));
+                try origins_list.append(allocator, try allocator.dupe(u8, trimmed));
             }
         }
         allocator.free(origins_str);
@@ -72,7 +72,7 @@ pub const Config = struct {
             std.log.warn("XEETAPUS_CSRF_SECRET not set, generating random value", .{});
             var buf: [32]u8 = undefined;
             std.crypto.random.bytes(&buf);
-            break :blk try std.fmt.allocPrint(allocator, "{s}", .{std.fmt.fmtSliceHexLower(&buf)});
+            break :blk try std.fmt.allocPrint(allocator, "{x}", .{std.mem.asBytes(&buf)});
         };
         errdefer allocator.free(csrf_secret);
 
@@ -112,7 +112,7 @@ pub const Config = struct {
             .database_path = db_path,
             .media_path = media_path,
             .server_port = port,
-            .allowed_origins = try origins_list.toOwnedSlice(),
+            .allowed_origins = try origins_list.toOwnedSlice(allocator),
             .bcrypt_cost = bcrypt_cost,
             .max_request_size = max_request_size,
             .rate_limit_requests = rate_limit_requests,
