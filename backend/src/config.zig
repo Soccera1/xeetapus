@@ -72,7 +72,8 @@ pub const Config = struct {
             std.log.warn("XEETAPUS_CSRF_SECRET not set, generating random value", .{});
             var buf: [32]u8 = undefined;
             std.crypto.random.bytes(&buf);
-            break :blk try std.fmt.allocPrint(allocator, "{s}", .{std.fmt.fmtSliceHexLower(&buf)});
+            const hex = std.fmt.bytesToHex(buf, .lower);
+            break :blk try allocator.dupe(u8, &hex);
         };
         errdefer allocator.free(csrf_secret);
 

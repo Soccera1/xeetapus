@@ -11,7 +11,8 @@ pub fn generateSecureToken(_: std.mem.Allocator) ![TOKEN_STRING_LEN]u8 {
     crypto.random.bytes(&bytes);
 
     var hex_token: [TOKEN_STRING_LEN]u8 = undefined;
-    _ = try std.fmt.bufPrint(&hex_token, "{s}", .{std.fmt.fmtSliceHexLower(&bytes)});
+    const hex = std.fmt.bytesToHex(bytes, .lower);
+    @memcpy(&hex_token, &hex);
 
     return hex_token;
 }
@@ -25,7 +26,8 @@ pub fn generateSecureTokenAlloc(allocator: std.mem.Allocator) ![]u8 {
     const hex_token = try allocator.alloc(u8, TOKEN_BYTES * 2);
     errdefer allocator.free(hex_token);
 
-    _ = try std.fmt.bufPrint(hex_token, "{s}", .{std.fmt.fmtSliceHexLower(&mutable_bytes)});
+    const hex = std.fmt.bytesToHex(mutable_bytes, .lower);
+    @memcpy(hex_token, &hex);
 
     return hex_token;
 }
@@ -161,8 +163,7 @@ pub fn generateCsrfToken(allocator: std.mem.Allocator, secret: []const u8, sessi
     hasher.update(nonce);
     hasher.final(&sig);
 
-    const sig_hex = try std.fmt.allocPrint(allocator, "{s}", .{std.fmt.fmtSliceHexLower(&sig)});
-    defer allocator.free(sig_hex);
+    const sig_hex = std.fmt.bytesToHex(sig, .lower);
 
     const token = try std.fmt.allocPrint(allocator, "{d}:{s}:{s}", .{ timestamp, nonce, sig_hex });
     return token;
@@ -194,8 +195,7 @@ pub fn verifyCsrfToken(secret: []const u8, session_id: []const u8, token: []cons
     hasher.final(&expected_sig);
 
     // Hex encode expected_sig for comparison
-    var expected_sig_hex_buf: [64]u8 = undefined;
-    const expected_sig_hex = std.fmt.bufPrint(&expected_sig_hex_buf, "{s}", .{std.fmt.fmtSliceHexLower(&expected_sig)}) catch return false;
+    const expected_sig_hex = std.fmt.bytesToHex(expected_sig, .lower);
 
     // Constant-time comparison
     if (sig_hex.len != expected_sig_hex.len) return false;

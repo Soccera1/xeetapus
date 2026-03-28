@@ -42,7 +42,8 @@ pub fn main() !void {
     try db.runMigrations();
 
     // Initialize audit logging
-    try audit.init("audit.log");
+    const audit_log_path = if (config.isProduction()) "/var/log/xeetapus.log" else "audit.log";
+    try audit.init(audit_log_path);
     defer audit.deinit();
 
     // Start HTTP server
