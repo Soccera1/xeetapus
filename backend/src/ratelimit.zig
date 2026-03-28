@@ -108,13 +108,13 @@ pub const RateLimiter = struct {
         defer self.mutex.unlock();
 
         const now = std.time.timestamp();
-        var to_remove = std.ArrayList([]const u8).init(self.allocator);
-        defer to_remove.deinit();
+        var to_remove: std.ArrayListUnmanaged([]const u8) = .{};
+        defer to_remove.deinit(self.allocator);
 
         var it = self.entries.iterator();
         while (it.next()) |entry| {
             if (now - entry.value_ptr.window_start > self.window_seconds * 2) {
-                to_remove.append(entry.key_ptr.*) catch continue;
+                to_remove.append(self.allocator, entry.key_ptr.*) catch continue;
             }
         }
 
@@ -128,6 +128,7 @@ pub const RateLimiter = struct {
 
 /// Get client IP from request, considering X-Forwarded-For header
 pub fn getClientIp(req_headers: std.StringHashMap([]const u8), remote_addr: std.net.Address) []const u8 {
+    _ = remote_addr;
     // Check X-Forwarded-For header (for requests behind proxy)
     if (req_headers.get("x-forwarded-for")) |forwarded| {
         // Take the first IP in the chain
@@ -143,6 +144,5 @@ pub fn getClientIp(req_headers: std.StringHashMap([]const u8), remote_addr: std.
     }
 
     // Fall back to remote address
-    var addr_buf: [64]u8 = undefined;
-    return std.fmt.bufPrint(&addr_buf, "{}", .{remote_addr}) catch "unknown";
+    return "unknown";
 }

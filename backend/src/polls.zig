@@ -89,14 +89,14 @@ pub fn vote(allocator: std.mem.Allocator, req: *http.Request, res: *http.Respons
     const user_id = try auth.getUserIdFromRequest(allocator, req) orelse {
         res.status = 401;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Unauthorized\"}");
+        try res.append("{\"error\":\"Unauthorized\"}");
         return;
     };
 
     const poll_id_str = req.params.get("id") orelse {
         res.status = 400;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Missing poll ID\"}");
+        try res.append("{\"error\":\"Missing poll ID\"}");
         return;
     };
 
@@ -105,7 +105,7 @@ pub fn vote(allocator: std.mem.Allocator, req: *http.Request, res: *http.Respons
     const parsed = std.json.parseFromSlice(struct { option_id: i64 }, allocator, body, .{}) catch {
         res.status = 400;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Invalid JSON\"}");
+        try res.append("{\"error\":\"Invalid JSON\"}");
         return;
     };
     defer parsed.deinit();
@@ -121,7 +121,7 @@ pub fn vote(allocator: std.mem.Allocator, req: *http.Request, res: *http.Respons
         std.log.err("Failed to check poll: {}", .{err});
         res.status = 500;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Failed to check poll\"}");
+        try res.append("{\"error\":\"Failed to check poll\"}");
         return;
     };
     defer db.freeRows(EndsAtRow, allocator, check_rows);
@@ -129,7 +129,7 @@ pub fn vote(allocator: std.mem.Allocator, req: *http.Request, res: *http.Respons
     if (check_rows.len == 0) {
         res.status = 404;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Poll not found\"}");
+        try res.append("{\"error\":\"Poll not found\"}");
         return;
     }
 
@@ -142,7 +142,7 @@ pub fn vote(allocator: std.mem.Allocator, req: *http.Request, res: *http.Respons
         std.log.err("Failed to check vote: {}", .{err});
         res.status = 500;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Failed to check vote\"}");
+        try res.append("{\"error\":\"Failed to check vote\"}");
         return;
     };
     defer db.freeRows(VotedRow, allocator, voted_rows);
@@ -150,7 +150,7 @@ pub fn vote(allocator: std.mem.Allocator, req: *http.Request, res: *http.Respons
     if (voted_rows.len > 0) {
         res.status = 400;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Already voted\"}");
+        try res.append("{\"error\":\"Already voted\"}");
         return;
     }
 
@@ -167,14 +167,14 @@ pub fn vote(allocator: std.mem.Allocator, req: *http.Request, res: *http.Respons
     );
 
     res.headers.put("Content-Type", "application/json") catch {};
-    try res.body.appendSlice("{\"message\":\"Vote recorded\"}");
+    try res.append("{\"message\":\"Vote recorded\"}");
 }
 
 pub fn getPollResults(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response) !void {
     const poll_id_str = req.params.get("id") orelse {
         res.status = 400;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Missing poll ID\"}");
+        try res.append("{\"error\":\"Missing poll ID\"}");
         return;
     };
 
@@ -198,20 +198,20 @@ pub fn getPollResults(allocator: std.mem.Allocator, req: *http.Request, res: *ht
         std.log.err("Failed to get poll results: {}", .{err});
         res.status = 500;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Failed to get poll results\"}");
+        try res.append("{\"error\":\"Failed to get poll results\"}");
         return;
     };
     defer db.freeRows(Result, allocator, rows);
 
     res.headers.put("Content-Type", "application/json") catch {};
-    try res.body.writer().print("{{\"options\":[", .{});
+    try res.bodyWriter().print("{{\"options\":[", .{});
     for (rows, 0..) |row, i| {
-        if (i > 0) try res.body.writer().print(",", .{});
+        if (i > 0) try res.bodyWriter().print(",", .{});
         const percentage = if (row.total_votes > 0) @as(f64, @floatFromInt(row.vote_count)) / @as(f64, @floatFromInt(row.total_votes)) * 100.0 else 0.0;
-        try res.body.writer().print("{{\"id\":{d},\"option_text\":\"{s}\",\"position\":{d},\"vote_count\":{d},\"percentage\":{d:.1}}}", .{
+        try res.bodyWriter().print("{{\"id\":{d},\"option_text\":\"{s}\",\"position\":{d},\"vote_count\":{d},\"percentage\":{d:.1}}}", .{
             row.id, row.option_text, row.position, row.vote_count, percentage,
         });
     }
     const total = if (rows.len > 0) rows[0].total_votes else 0;
-    try res.body.writer().print("],\"total_votes\":{d}}}", .{total});
+    try res.bodyWriter().print("],\"total_votes\":{d}}}", .{total});
 }

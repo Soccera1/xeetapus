@@ -25,7 +25,7 @@ pub fn generateSecureTokenAlloc(allocator: std.mem.Allocator) ![]u8 {
     const hex_token = try allocator.alloc(u8, TOKEN_BYTES * 2);
     errdefer allocator.free(hex_token);
 
-    _ = try std.fmt.bufPrint(hex_token, "{s}", .{std.fmt.fmtSliceHexLower(&mutable_bytes)});
+    _ = try std.fmt.bufPrint(hex_token, "{x}", .{std.mem.asBytes(&mutable_bytes)});
 
     return hex_token;
 }
@@ -107,8 +107,12 @@ pub fn verifySignedToken(
     defer allocator.free(sig);
     std.base64.url_safe_no_pad.Decoder.decode(sig, sig_b64) catch return null;
 
-    // Constant-time comparison
-    if (!crypto.utils.timingSafeEql([32]u8, expected_sig, sig[0..32].*)) {
+    // Constant-time comparison using XOR and OR accumulation
+    var result: u8 = 0;
+    for (expected_sig, sig[0..32]) |a, b| {
+        result |= a ^ b;
+    }
+    if (result != 0) {
         return null;
     }
 
@@ -161,7 +165,7 @@ pub fn generateCsrfToken(allocator: std.mem.Allocator, secret: []const u8, sessi
     hasher.update(nonce);
     hasher.final(&sig);
 
-    const sig_hex = try std.fmt.allocPrint(allocator, "{s}", .{std.fmt.fmtSliceHexLower(&sig)});
+    const sig_hex = try std.fmt.allocPrint(allocator, "{x}", .{std.mem.asBytes(&sig)});
     defer allocator.free(sig_hex);
 
     const token = try std.fmt.allocPrint(allocator, "{d}:{s}:{s}", .{ timestamp, nonce, sig_hex });

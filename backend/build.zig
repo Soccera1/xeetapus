@@ -6,16 +6,17 @@ pub fn build(b: *std.Build) void {
 
     const exe = b.addExecutable(.{
         .name = "xeetapus-backend",
-        .root_source_file = b.path("src/main.zig"),
-        .target = target,
-        .optimize = optimize,
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/main.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
     });
 
-    // Add SQLite dependency
-    exe.addIncludePath(.{ .cwd_relative = "/usr/include" });
-    exe.addLibraryPath(.{ .cwd_relative = "/usr/lib64" });
-    exe.linkSystemLibrary("sqlite3");
-    exe.linkLibC();
+    exe.root_module.addIncludePath(.{ .cwd_relative = "/usr/include" });
+    exe.root_module.addLibraryPath(.{ .cwd_relative = "/usr/lib64" });
+    exe.root_module.linkSystemLibrary("sqlite3", .{});
+    exe.root_module.link_libc = true;
 
     b.installArtifact(exe);
 
@@ -30,9 +31,11 @@ pub fn build(b: *std.Build) void {
     run_step.dependOn(&run_cmd.step);
 
     const unit_tests = b.addTest(.{
-        .root_source_file = b.path("src/main.zig"),
-        .target = target,
-        .optimize = optimize,
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/main.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
     });
 
     const run_unit_tests = b.addRunArtifact(unit_tests);

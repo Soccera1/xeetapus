@@ -8,7 +8,7 @@ pub fn getTimeline(allocator: std.mem.Allocator, req: *http.Request, res: *http.
     const user_id = try auth.getUserIdFromRequest(allocator, req) orelse {
         res.status = 401;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Unauthorized\"}");
+        try res.append("{\"error\":\"Unauthorized\"}");
         return;
     };
 
@@ -56,16 +56,16 @@ pub fn getTimeline(allocator: std.mem.Allocator, req: *http.Request, res: *http.
     const rows = db.query(Post, allocator, sql, &params) catch {
         res.status = 500;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Failed to fetch timeline\"}");
+        try res.append("{\"error\":\"Failed to fetch timeline\"}");
         return;
     };
     defer db.freeRows(Post, allocator, rows);
 
     res.headers.put("Content-Type", "application/json") catch {};
-    try res.body.appendSlice("[");
+    try res.append("[");
 
     for (rows, 0..) |post, idx| {
-        if (idx > 0) try res.body.appendSlice(",");
+        if (idx > 0) try res.append(",");
         const escaped_content = try json_utils.escapeJson(allocator, post.content);
         defer allocator.free(escaped_content);
         const escaped_username = try json_utils.escapeJson(allocator, post.username);
@@ -74,10 +74,10 @@ pub fn getTimeline(allocator: std.mem.Allocator, req: *http.Request, res: *http.
         defer allocator.free(escaped_display_name);
         const escaped_created_at = try json_utils.escapeJson(allocator, post.created_at);
         defer allocator.free(escaped_created_at);
-        try res.body.writer().print("{{\"id\":{d},\"user_id\":{d},\"username\":\"{s}\",\"display_name\":\"{s}\",\"content\":\"{s}\",\"created_at\":\"{s}\",\"likes_count\":{d},\"comments_count\":{d},\"reposts_count\":{d},\"is_liked\":{s},\"is_reposted\":{s},\"is_bookmarked\":{s}}}", .{ post.id, post.user_id, escaped_username, escaped_display_name, escaped_content, escaped_created_at, post.likes_count, post.comments_count, post.reposts_count, if (post.is_liked) "true" else "false", if (post.is_reposted) "true" else "false", if (post.is_bookmarked) "true" else "false" });
+        try res.bodyWriter().print("{{\"id\":{d},\"user_id\":{d},\"username\":\"{s}\",\"display_name\":\"{s}\",\"content\":\"{s}\",\"created_at\":\"{s}\",\"likes_count\":{d},\"comments_count\":{d},\"reposts_count\":{d},\"is_liked\":{s},\"is_reposted\":{s},\"is_bookmarked\":{s}}}", .{ post.id, post.user_id, escaped_username, escaped_display_name, escaped_content, escaped_created_at, post.likes_count, post.comments_count, post.reposts_count, if (post.is_liked) "true" else "false", if (post.is_reposted) "true" else "false", if (post.is_bookmarked) "true" else "false" });
     }
 
-    try res.body.appendSlice("]");
+    try res.append("]");
 }
 
 pub fn getExplore(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response) !void {
@@ -125,16 +125,16 @@ pub fn getExplore(allocator: std.mem.Allocator, req: *http.Request, res: *http.R
     const rows = db.query(Post, allocator, sql, &params) catch {
         res.status = 500;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Failed to fetch explore\"}");
+        try res.append("{\"error\":\"Failed to fetch explore\"}");
         return;
     };
     defer db.freeRows(Post, allocator, rows);
 
     res.headers.put("Content-Type", "application/json") catch {};
-    try res.body.appendSlice("[");
+    try res.append("[");
 
     for (rows, 0..) |post, idx| {
-        if (idx > 0) try res.body.appendSlice(",");
+        if (idx > 0) try res.append(",");
         const escaped_content = try json_utils.escapeJson(allocator, post.content);
         defer allocator.free(escaped_content);
         const escaped_username = try json_utils.escapeJson(allocator, post.username);
@@ -143,8 +143,8 @@ pub fn getExplore(allocator: std.mem.Allocator, req: *http.Request, res: *http.R
         defer allocator.free(escaped_display_name);
         const escaped_created_at = try json_utils.escapeJson(allocator, post.created_at);
         defer allocator.free(escaped_created_at);
-        try res.body.writer().print("{{\"id\":{d},\"user_id\":{d},\"username\":\"{s}\",\"display_name\":\"{s}\",\"content\":\"{s}\",\"created_at\":\"{s}\",\"likes_count\":{d},\"comments_count\":{d},\"reposts_count\":{d},\"is_liked\":{s},\"is_reposted\":{s},\"is_bookmarked\":{s}}}", .{ post.id, post.user_id, escaped_username, escaped_display_name, escaped_content, escaped_created_at, post.likes_count, post.comments_count, post.reposts_count, if (post.is_liked) "true" else "false", if (post.is_reposted) "true" else "false", if (post.is_bookmarked) "true" else "false" });
+        try res.bodyWriter().print("{{\"id\":{d},\"user_id\":{d},\"username\":\"{s}\",\"display_name\":\"{s}\",\"content\":\"{s}\",\"created_at\":\"{s}\",\"likes_count\":{d},\"comments_count\":{d},\"reposts_count\":{d},\"is_liked\":{s},\"is_reposted\":{s},\"is_bookmarked\":{s}}}", .{ post.id, post.user_id, escaped_username, escaped_display_name, escaped_content, escaped_created_at, post.likes_count, post.comments_count, post.reposts_count, if (post.is_liked) "true" else "false", if (post.is_reposted) "true" else "false", if (post.is_bookmarked) "true" else "false" });
     }
 
-    try res.body.appendSlice("]");
+    try res.append("]");
 }

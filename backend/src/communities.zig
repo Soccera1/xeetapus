@@ -45,16 +45,16 @@ pub fn list(allocator: std.mem.Allocator, req: *http.Request, res: *http.Respons
     const rows = db.query(Community, allocator, sql, &params) catch {
         res.status = 500;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Failed to fetch communities\"}");
+        try res.append("{\"error\":\"Failed to fetch communities\"}");
         return;
     };
     defer db.freeRows(Community, allocator, rows);
 
     res.headers.put("Content-Type", "application/json") catch {};
-    try res.body.appendSlice("[");
+    try res.append("[");
 
     for (rows, 0..) |community, i| {
-        if (i > 0) try res.body.appendSlice(",");
+        if (i > 0) try res.append(",");
         const escaped_name = try json_utils.escapeJson(allocator, community.name);
         defer allocator.free(escaped_name);
         const escaped_description = try json_utils.escapeJson(allocator, community.description orelse "");
@@ -65,10 +65,10 @@ pub fn list(allocator: std.mem.Allocator, req: *http.Request, res: *http.Respons
         defer allocator.free(escaped_banner_url);
         const escaped_created_at = try json_utils.escapeJson(allocator, community.created_at);
         defer allocator.free(escaped_created_at);
-        try res.body.writer().print("{{\"id\":{d},\"name\":\"{s}\",\"description\":\"{s}\",\"icon_url\":\"{s}\",\"banner_url\":\"{s}\",\"created_by\":{d},\"created_at\":\"{s}\",\"member_count\":{d},\"post_count\":{d},\"is_member\":{s}}}", .{ community.id, escaped_name, escaped_description, escaped_icon_url, escaped_banner_url, community.created_by, escaped_created_at, community.member_count, community.post_count, if (community.is_member) "true" else "false" });
+        try res.bodyWriter().print("{{\"id\":{d},\"name\":\"{s}\",\"description\":\"{s}\",\"icon_url\":\"{s}\",\"banner_url\":\"{s}\",\"created_by\":{d},\"created_at\":\"{s}\",\"member_count\":{d},\"post_count\":{d},\"is_member\":{s}}}", .{ community.id, escaped_name, escaped_description, escaped_icon_url, escaped_banner_url, community.created_by, escaped_created_at, community.member_count, community.post_count, if (community.is_member) "true" else "false" });
     }
 
-    try res.body.appendSlice("]");
+    try res.append("]");
 }
 
 pub fn get(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response) !void {
@@ -91,7 +91,7 @@ pub fn get(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response
     if (community_id == null) {
         res.status = 400;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Invalid community ID\"}");
+        try res.append("{\"error\":\"Invalid community ID\"}");
         return;
     }
 
@@ -115,7 +115,7 @@ pub fn get(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response
     const rows = db.query(Community, allocator, sql, &params) catch {
         res.status = 500;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Failed to fetch community\"}");
+        try res.append("{\"error\":\"Failed to fetch community\"}");
         return;
     };
     defer db.freeRows(Community, allocator, rows);
@@ -123,7 +123,7 @@ pub fn get(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response
     if (rows.len == 0) {
         res.status = 404;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Community not found\"}");
+        try res.append("{\"error\":\"Community not found\"}");
         return;
     }
 
@@ -139,14 +139,14 @@ pub fn get(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response
     defer allocator.free(escaped_banner_url);
     const escaped_created_at = try json_utils.escapeJson(allocator, community.created_at);
     defer allocator.free(escaped_created_at);
-    try res.body.writer().print("{{\"id\":{d},\"name\":\"{s}\",\"description\":\"{s}\",\"icon_url\":\"{s}\",\"banner_url\":\"{s}\",\"created_by\":{d},\"created_at\":\"{s}\",\"member_count\":{d},\"post_count\":{d},\"is_member\":{s}}}", .{ community.id, escaped_name, escaped_description, escaped_icon_url, escaped_banner_url, community.created_by, escaped_created_at, community.member_count, community.post_count, if (community.is_member) "true" else "false" });
+    try res.bodyWriter().print("{{\"id\":{d},\"name\":\"{s}\",\"description\":\"{s}\",\"icon_url\":\"{s}\",\"banner_url\":\"{s}\",\"created_by\":{d},\"created_at\":\"{s}\",\"member_count\":{d},\"post_count\":{d},\"is_member\":{s}}}", .{ community.id, escaped_name, escaped_description, escaped_icon_url, escaped_banner_url, community.created_by, escaped_created_at, community.member_count, community.post_count, if (community.is_member) "true" else "false" });
 }
 
 pub fn create(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response) !void {
     const user_id = try auth.getUserIdFromRequest(allocator, req) orelse {
         res.status = 401;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Unauthorized\"}");
+        try res.append("{\"error\":\"Unauthorized\"}");
         return;
     };
 
@@ -159,7 +159,7 @@ pub fn create(allocator: std.mem.Allocator, req: *http.Request, res: *http.Respo
     if (body.name.len < 3 or body.name.len > 50) {
         res.status = 400;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Community name must be between 3 and 50 characters\"}");
+        try res.append("{\"error\":\"Community name must be between 3 and 50 characters\"}");
         return;
     }
 
@@ -183,7 +183,7 @@ pub fn create(allocator: std.mem.Allocator, req: *http.Request, res: *http.Respo
     db.execute(sql, &params) catch {
         res.status = 409;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Community name already exists\"}");
+        try res.append("{\"error\":\"Community name already exists\"}");
         return;
     };
 
@@ -200,14 +200,14 @@ pub fn create(allocator: std.mem.Allocator, req: *http.Request, res: *http.Respo
     res.headers.put("Content-Type", "application/json") catch {};
     const escaped_name = try json_utils.escapeJson(allocator, body.name);
     defer allocator.free(escaped_name);
-    try res.body.writer().print("{{\"id\":{d},\"name\":\"{s}\",\"created\":true}}", .{ community_id, escaped_name });
+    try res.bodyWriter().print("{{\"id\":{d},\"name\":\"{s}\",\"created\":true}}", .{ community_id, escaped_name });
 }
 
 pub fn join(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response) !void {
     const user_id = try auth.getUserIdFromRequest(allocator, req) orelse {
         res.status = 401;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Unauthorized\"}");
+        try res.append("{\"error\":\"Unauthorized\"}");
         return;
     };
 
@@ -228,7 +228,7 @@ pub fn join(allocator: std.mem.Allocator, req: *http.Request, res: *http.Respons
     if (community_id == null) {
         res.status = 400;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Invalid community ID\"}");
+        try res.append("{\"error\":\"Invalid community ID\"}");
         return;
     }
 
@@ -241,19 +241,19 @@ pub fn join(allocator: std.mem.Allocator, req: *http.Request, res: *http.Respons
     db.execute(sql, &[_][]const u8{ community_id_str, user_id_str }) catch {
         res.status = 500;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Failed to join community\"}");
+        try res.append("{\"error\":\"Failed to join community\"}");
         return;
     };
 
     res.headers.put("Content-Type", "application/json") catch {};
-    try res.body.appendSlice("{\"joined\":true}");
+    try res.append("{\"joined\":true}");
 }
 
 pub fn leave(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response) !void {
     const user_id = try auth.getUserIdFromRequest(allocator, req) orelse {
         res.status = 401;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Unauthorized\"}");
+        try res.append("{\"error\":\"Unauthorized\"}");
         return;
     };
 
@@ -274,7 +274,7 @@ pub fn leave(allocator: std.mem.Allocator, req: *http.Request, res: *http.Respon
     if (community_id == null) {
         res.status = 400;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Invalid community ID\"}");
+        try res.append("{\"error\":\"Invalid community ID\"}");
         return;
     }
 
@@ -287,12 +287,12 @@ pub fn leave(allocator: std.mem.Allocator, req: *http.Request, res: *http.Respon
     db.execute(sql, &[_][]const u8{ community_id_str, user_id_str }) catch {
         res.status = 500;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Failed to leave community\"}");
+        try res.append("{\"error\":\"Failed to leave community\"}");
         return;
     };
 
     res.headers.put("Content-Type", "application/json") catch {};
-    try res.body.appendSlice("{\"left\":true}");
+    try res.append("{\"left\":true}");
 }
 
 pub fn getPosts(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response) !void {
@@ -315,7 +315,7 @@ pub fn getPosts(allocator: std.mem.Allocator, req: *http.Request, res: *http.Res
     if (community_id == null) {
         res.status = 400;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Invalid community ID\"}");
+        try res.append("{\"error\":\"Invalid community ID\"}");
         return;
     }
 
@@ -365,16 +365,16 @@ pub fn getPosts(allocator: std.mem.Allocator, req: *http.Request, res: *http.Res
     const rows = db.query(Post, allocator, sql, &params) catch {
         res.status = 500;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Failed to fetch community posts\"}");
+        try res.append("{\"error\":\"Failed to fetch community posts\"}");
         return;
     };
     defer db.freeRows(Post, allocator, rows);
 
     res.headers.put("Content-Type", "application/json") catch {};
-    try res.body.appendSlice("[");
+    try res.append("[");
 
     for (rows, 0..) |post, idx| {
-        if (idx > 0) try res.body.appendSlice(",");
+        if (idx > 0) try res.append(",");
         const escaped_content = try json_utils.escapeJson(allocator, post.content);
         defer allocator.free(escaped_content);
         const escaped_username = try json_utils.escapeJson(allocator, post.username);
@@ -383,17 +383,17 @@ pub fn getPosts(allocator: std.mem.Allocator, req: *http.Request, res: *http.Res
         defer allocator.free(escaped_display_name);
         const escaped_created_at = try json_utils.escapeJson(allocator, post.created_at);
         defer allocator.free(escaped_created_at);
-        try res.body.writer().print("{{\"id\":{d},\"user_id\":{d},\"username\":\"{s}\",\"display_name\":\"{s}\",\"content\":\"{s}\",\"created_at\":\"{s}\",\"likes_count\":{d},\"comments_count\":{d},\"reposts_count\":{d},\"is_liked\":{s},\"is_reposted\":{s},\"is_bookmarked\":{s}}}", .{ post.id, post.user_id, escaped_username, escaped_display_name, escaped_content, escaped_created_at, post.likes_count, post.comments_count, post.reposts_count, if (post.is_liked) "true" else "false", if (post.is_reposted) "true" else "false", if (post.is_bookmarked) "true" else "false" });
+        try res.bodyWriter().print("{{\"id\":{d},\"user_id\":{d},\"username\":\"{s}\",\"display_name\":\"{s}\",\"content\":\"{s}\",\"created_at\":\"{s}\",\"likes_count\":{d},\"comments_count\":{d},\"reposts_count\":{d},\"is_liked\":{s},\"is_reposted\":{s},\"is_bookmarked\":{s}}}", .{ post.id, post.user_id, escaped_username, escaped_display_name, escaped_content, escaped_created_at, post.likes_count, post.comments_count, post.reposts_count, if (post.is_liked) "true" else "false", if (post.is_reposted) "true" else "false", if (post.is_bookmarked) "true" else "false" });
     }
 
-    try res.body.appendSlice("]");
+    try res.append("]");
 }
 
 pub fn createPost(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response) !void {
     const user_id = try auth.getUserIdFromRequest(allocator, req) orelse {
         res.status = 401;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Unauthorized\"}");
+        try res.append("{\"error\":\"Unauthorized\"}");
         return;
     };
 
@@ -414,7 +414,7 @@ pub fn createPost(allocator: std.mem.Allocator, req: *http.Request, res: *http.R
     if (community_id == null) {
         res.status = 400;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Invalid community ID\"}");
+        try res.append("{\"error\":\"Invalid community ID\"}");
         return;
     }
 
@@ -435,7 +435,7 @@ pub fn createPost(allocator: std.mem.Allocator, req: *http.Request, res: *http.R
     if (check_rows.len == 0) {
         res.status = 403;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Must be a community member to post\"}");
+        try res.append("{\"error\":\"Must be a community member to post\"}");
         return;
     }
 
@@ -453,7 +453,7 @@ pub fn createPost(allocator: std.mem.Allocator, req: *http.Request, res: *http.R
     if (body.content.len == 0 or body.content.len > 280) {
         res.status = 400;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Content must be between 1 and 280 characters\"}");
+        try res.append("{\"error\":\"Content must be between 1 and 280 characters\"}");
         return;
     }
 
@@ -472,7 +472,7 @@ pub fn createPost(allocator: std.mem.Allocator, req: *http.Request, res: *http.R
     db.execute(post_sql, &post_params) catch {
         res.status = 500;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Failed to create post\"}");
+        try res.append("{\"error\":\"Failed to create post\"}");
         return;
     };
 
@@ -488,7 +488,7 @@ pub fn createPost(allocator: std.mem.Allocator, req: *http.Request, res: *http.R
         // For simplicity, we'll just return an error
         res.status = 500;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Failed to link post to community\"}");
+        try res.append("{\"error\":\"Failed to link post to community\"}");
         return;
     };
 
@@ -496,7 +496,7 @@ pub fn createPost(allocator: std.mem.Allocator, req: *http.Request, res: *http.R
     res.headers.put("Content-Type", "application/json") catch {};
     const escaped_content = try json_utils.escapeJson(allocator, body.content);
     defer allocator.free(escaped_content);
-    try res.body.writer().print("{{\"id\":{d},\"content\":\"{s}\",\"created\":true}}", .{ post_id, escaped_content });
+    try res.bodyWriter().print("{{\"id\":{d},\"content\":\"{s}\",\"created\":true}}", .{ post_id, escaped_content });
 }
 
 pub fn getMembers(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response) !void {
@@ -517,7 +517,7 @@ pub fn getMembers(allocator: std.mem.Allocator, req: *http.Request, res: *http.R
     if (community_id == null) {
         res.status = 400;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Invalid community ID\"}");
+        try res.append("{\"error\":\"Invalid community ID\"}");
         return;
     }
 
@@ -542,24 +542,24 @@ pub fn getMembers(allocator: std.mem.Allocator, req: *http.Request, res: *http.R
     const rows = db.query(User, allocator, sql, &[_][]const u8{community_id_str}) catch {
         res.status = 500;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Failed to fetch members\"}");
+        try res.append("{\"error\":\"Failed to fetch members\"}");
         return;
     };
     defer db.freeRows(User, allocator, rows);
 
     res.headers.put("Content-Type", "application/json") catch {};
-    try res.body.appendSlice("[");
+    try res.append("[");
 
     for (rows, 0..) |user, idx| {
-        if (idx > 0) try res.body.appendSlice(",");
+        if (idx > 0) try res.append(",");
         const escaped_username = try json_utils.escapeJson(allocator, user.username);
         defer allocator.free(escaped_username);
         const escaped_display_name = try json_utils.escapeJson(allocator, user.display_name);
         defer allocator.free(escaped_display_name);
         const escaped_avatar_url = try json_utils.escapeJson(allocator, user.avatar_url);
         defer allocator.free(escaped_avatar_url);
-        try res.body.writer().print("{{\"id\":{d},\"username\":\"{s}\",\"display_name\":\"{s}\",\"avatar_url\":\"{s}\"}}", .{ user.id, escaped_username, escaped_display_name, escaped_avatar_url });
+        try res.bodyWriter().print("{{\"id\":{d},\"username\":\"{s}\",\"display_name\":\"{s}\",\"avatar_url\":\"{s}\"}}", .{ user.id, escaped_username, escaped_display_name, escaped_avatar_url });
     }
 
-    try res.body.appendSlice("]");
+    try res.append("]");
 }

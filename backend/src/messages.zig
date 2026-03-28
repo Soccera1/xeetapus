@@ -31,7 +31,7 @@ pub fn getConversations(allocator: std.mem.Allocator, req: *http.Request, res: *
     const user_id = try auth.getUserIdFromRequest(allocator, req) orelse {
         res.status = 401;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Unauthorized\"}");
+        try res.append("{\"error\":\"Unauthorized\"}");
         return;
     };
 
@@ -60,31 +60,31 @@ pub fn getConversations(allocator: std.mem.Allocator, req: *http.Request, res: *
         std.log.err("Failed to get conversations: {}", .{err});
         res.status = 500;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Failed to get conversations\"}");
+        try res.append("{\"error\":\"Failed to get conversations\"}");
         return;
     };
     defer db.freeRows(ConversationWithParticipants, allocator, rows);
 
     res.headers.put("Content-Type", "application/json") catch {};
-    try res.body.writer().print("{{\"conversations\":[", .{});
+    try res.bodyWriter().print("{{\"conversations\":[", .{});
     for (rows, 0..) |row, i| {
-        if (i > 0) try res.body.writer().print(",", .{});
-        try res.body.writer().print("{{\"id\":{d},\"created_at\":\"{s}\",\"updated_at\":\"{s}\",\"participants\":\"{s}\"", .{
+        if (i > 0) try res.bodyWriter().print(",", .{});
+        try res.bodyWriter().print("{{\"id\":{d},\"created_at\":\"{s}\",\"updated_at\":\"{s}\",\"participants\":\"{s}\"", .{
             row.id, row.created_at, row.updated_at, row.participants,
         });
         if (row.last_message) |msg| {
-            try res.body.writer().print(",\"last_message\":\"{s}\"", .{msg});
+            try res.bodyWriter().print(",\"last_message\":\"{s}\"", .{msg});
         }
-        try res.body.writer().print(",\"unread_count\":{d}}}", .{row.unread_count});
+        try res.bodyWriter().print(",\"unread_count\":{d}}}", .{row.unread_count});
     }
-    try res.body.writer().print("]}}", .{});
+    try res.bodyWriter().print("]}}", .{});
 }
 
 pub fn createConversation(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response) !void {
     const user_id = try auth.getUserIdFromRequest(allocator, req) orelse {
         res.status = 401;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Unauthorized\"}");
+        try res.append("{\"error\":\"Unauthorized\"}");
         return;
     };
 
@@ -93,7 +93,7 @@ pub fn createConversation(allocator: std.mem.Allocator, req: *http.Request, res:
     const parsed = std.json.parseFromSlice(struct { participant_ids: []i64 }, allocator, body, .{}) catch {
         res.status = 400;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Invalid JSON\"}");
+        try res.append("{\"error\":\"Invalid JSON\"}");
         return;
     };
     defer parsed.deinit();
@@ -126,21 +126,21 @@ pub fn createConversation(allocator: std.mem.Allocator, req: *http.Request, res:
     }
 
     res.headers.put("Content-Type", "application/json") catch {};
-    try res.body.writer().print("{{\"id\":{d},\"message\":\"Conversation created\"}}", .{conversation_id});
+    try res.bodyWriter().print("{{\"id\":{d},\"message\":\"Conversation created\"}}", .{conversation_id});
 }
 
 pub fn getMessages(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response) !void {
     const user_id = try auth.getUserIdFromRequest(allocator, req) orelse {
         res.status = 401;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Unauthorized\"}");
+        try res.append("{\"error\":\"Unauthorized\"}");
         return;
     };
 
     const conversation_id_str = req.params.get("id") orelse {
         res.status = 400;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Missing conversation ID\"}");
+        try res.append("{\"error\":\"Missing conversation ID\"}");
         return;
     };
 
@@ -156,7 +156,7 @@ pub fn getMessages(allocator: std.mem.Allocator, req: *http.Request, res: *http.
         std.log.err("Failed to check participation: {}", .{err});
         res.status = 500;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Failed to check participation\"}");
+        try res.append("{\"error\":\"Failed to check participation\"}");
         return;
     };
     defer db.freeRows(DummyRow, allocator, check_rows);
@@ -164,7 +164,7 @@ pub fn getMessages(allocator: std.mem.Allocator, req: *http.Request, res: *http.
     if (check_rows.len == 0) {
         res.status = 403;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Not a participant in this conversation\"}");
+        try res.append("{\"error\":\"Not a participant in this conversation\"}");
         return;
     }
 
@@ -182,7 +182,7 @@ pub fn getMessages(allocator: std.mem.Allocator, req: *http.Request, res: *http.
         std.log.err("Failed to get messages: {}", .{err});
         res.status = 500;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Failed to get messages\"}");
+        try res.append("{\"error\":\"Failed to get messages\"}");
         return;
     };
     defer db.freeRows(Message, allocator, rows);
@@ -194,36 +194,36 @@ pub fn getMessages(allocator: std.mem.Allocator, req: *http.Request, res: *http.
     );
 
     res.headers.put("Content-Type", "application/json") catch {};
-    try res.body.writer().print("{{\"messages\":[", .{});
+    try res.bodyWriter().print("{{\"messages\":[", .{});
     for (rows, 0..) |row, i| {
-        if (i > 0) try res.body.writer().print(",", .{});
-        try res.body.writer().print("{{\"id\":{d},\"conversation_id\":{d},\"sender_id\":{d},\"sender_username\":\"{s}\"", .{
+        if (i > 0) try res.bodyWriter().print(",", .{});
+        try res.bodyWriter().print("{{\"id\":{d},\"conversation_id\":{d},\"sender_id\":{d},\"sender_username\":\"{s}\"", .{
             row.id, row.conversation_id, row.sender_id, row.sender_username,
         });
         if (row.sender_display_name) |name| {
-            try res.body.writer().print(",\"sender_display_name\":\"{s}\"", .{name});
+            try res.bodyWriter().print(",\"sender_display_name\":\"{s}\"", .{name});
         }
-        try res.body.writer().print(",\"content\":\"{s}\"", .{row.content});
+        try res.bodyWriter().print(",\"content\":\"{s}\"", .{row.content});
         if (row.media_urls) |urls| {
-            try res.body.writer().print(",\"media_urls\":\"{s}\"", .{urls});
+            try res.bodyWriter().print(",\"media_urls\":\"{s}\"", .{urls});
         }
-        try res.body.writer().print(",\"read\":{d},\"created_at\":\"{s}\"}}", .{ row.read, row.created_at });
+        try res.bodyWriter().print(",\"read\":{d},\"created_at\":\"{s}\"}}", .{ row.read, row.created_at });
     }
-    try res.body.writer().print("]}}", .{});
+    try res.bodyWriter().print("]}}", .{});
 }
 
 pub fn sendMessage(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response) !void {
     const user_id = try auth.getUserIdFromRequest(allocator, req) orelse {
         res.status = 401;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Unauthorized\"}");
+        try res.append("{\"error\":\"Unauthorized\"}");
         return;
     };
 
     const conversation_id_str = req.params.get("id") orelse {
         res.status = 400;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Missing conversation ID\"}");
+        try res.append("{\"error\":\"Missing conversation ID\"}");
         return;
     };
 
@@ -239,7 +239,7 @@ pub fn sendMessage(allocator: std.mem.Allocator, req: *http.Request, res: *http.
         std.log.err("Failed to check participation: {}", .{err});
         res.status = 500;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Failed to check participation\"}");
+        try res.append("{\"error\":\"Failed to check participation\"}");
         return;
     };
     defer db.freeRows(DummyRow, allocator, check_rows);
@@ -247,7 +247,7 @@ pub fn sendMessage(allocator: std.mem.Allocator, req: *http.Request, res: *http.
     if (check_rows.len == 0) {
         res.status = 403;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Not a participant in this conversation\"}");
+        try res.append("{\"error\":\"Not a participant in this conversation\"}");
         return;
     }
 
@@ -256,7 +256,7 @@ pub fn sendMessage(allocator: std.mem.Allocator, req: *http.Request, res: *http.
     const parsed = std.json.parseFromSlice(struct { content: []const u8, media_urls: ?[]const u8 }, allocator, body, .{}) catch {
         res.status = 400;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Invalid JSON\"}");
+        try res.append("{\"error\":\"Invalid JSON\"}");
         return;
     };
     defer parsed.deinit();
@@ -278,14 +278,14 @@ pub fn sendMessage(allocator: std.mem.Allocator, req: *http.Request, res: *http.
     );
 
     res.headers.put("Content-Type", "application/json") catch {};
-    try res.body.writer().print("{{\"id\":{d},\"message\":\"Message sent\"}}", .{db.lastInsertRowId()});
+    try res.bodyWriter().print("{{\"id\":{d},\"message\":\"Message sent\"}}", .{db.lastInsertRowId()});
 }
 
 pub fn getUnreadCount(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response) !void {
     const user_id = try auth.getUserIdFromRequest(allocator, req) orelse {
         res.status = 401;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Unauthorized\"}");
+        try res.append("{\"error\":\"Unauthorized\"}");
         return;
     };
 
@@ -306,12 +306,12 @@ pub fn getUnreadCount(allocator: std.mem.Allocator, req: *http.Request, res: *ht
         std.log.err("Failed to get unread count: {}", .{err});
         res.status = 500;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Failed to get unread count\"}");
+        try res.append("{\"error\":\"Failed to get unread count\"}");
         return;
     };
     defer db.freeRows(CountRow, allocator, rows);
 
     const count = if (rows.len > 0) rows[0].count else 0;
     res.headers.put("Content-Type", "application/json") catch {};
-    try res.body.writer().print("{{\"unread_count\":{d}}}", .{count});
+    try res.bodyWriter().print("{{\"unread_count\":{d}}}", .{count});
 }

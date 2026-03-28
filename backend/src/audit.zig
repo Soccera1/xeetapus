@@ -57,12 +57,7 @@ pub fn log(
 
     // Get IP address from headers or fall back to remote address
     const ip_address = req.headers.get("x-forwarded-for") orelse
-        req.headers.get("x-real-ip") orelse blk: {
-        // Fall back to remote_addr from connection
-        var addr_buf: [64]u8 = undefined;
-        const addr_str = std.fmt.bufPrint(&addr_buf, "{}", .{req.remote_addr}) catch "unknown";
-        break :blk addr_str;
-    };
+        req.headers.get("x-real-ip") orelse "unknown";
     const user_agent = req.headers.get("user-agent");
 
     // Format log entry as JSON

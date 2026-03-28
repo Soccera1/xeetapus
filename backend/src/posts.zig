@@ -49,7 +49,7 @@ pub fn create(allocator: std.mem.Allocator, req: *http.Request, res: *http.Respo
     const user_id = try auth.getUserIdFromRequest(allocator, req) orelse {
         res.status = 401;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Unauthorized\"}");
+        try res.append("{\"error\":\"Unauthorized\"}");
         return;
     };
 
@@ -62,7 +62,7 @@ pub fn create(allocator: std.mem.Allocator, req: *http.Request, res: *http.Respo
     if (body.content.len == 0 or body.content.len > 280) {
         res.status = 400;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Content must be between 1 and 280 characters\"}");
+        try res.append("{\"error\":\"Content must be between 1 and 280 characters\"}");
         return;
     }
 
@@ -92,7 +92,7 @@ pub fn create(allocator: std.mem.Allocator, req: *http.Request, res: *http.Respo
     db.execute(sql, &params) catch {
         res.status = 500;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Failed to create post\"}");
+        try res.append("{\"error\":\"Failed to create post\"}");
         return;
     };
 
@@ -153,7 +153,7 @@ pub fn create(allocator: std.mem.Allocator, req: *http.Request, res: *http.Respo
     res.headers.put("Content-Type", "application/json") catch {};
     const escaped_content_create = try json_utils.escapeJson(allocator, body.content);
     defer allocator.free(escaped_content_create);
-    try res.body.writer().print("{{\"id\":{d},\"content\":\"{s}\",\"created\":true}}", .{ post_id, escaped_content_create });
+    try res.bodyWriter().print("{{\"id\":{d},\"content\":\"{s}\",\"created\":true}}", .{ post_id, escaped_content_create });
 }
 
 pub fn list(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response) !void {
@@ -185,17 +185,17 @@ pub fn list(allocator: std.mem.Allocator, req: *http.Request, res: *http.Respons
     const rows = db.query(Post, allocator, sql, &params) catch {
         res.status = 500;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Failed to fetch posts\"}");
+        try res.append("{\"error\":\"Failed to fetch posts\"}");
         return;
     };
     defer db.freeRows(Post, allocator, rows);
 
     // Build JSON response manually
     res.headers.put("Content-Type", "application/json") catch {};
-    try res.body.appendSlice("[");
+    try res.append("[");
 
     for (rows, 0..) |post, i| {
-        if (i > 0) try res.body.appendSlice(",");
+        if (i > 0) try res.append(",");
         const escaped_content = try json_utils.escapeJson(allocator, post.content);
         defer allocator.free(escaped_content);
         const escaped_username = try json_utils.escapeJson(allocator, post.username);
@@ -204,10 +204,10 @@ pub fn list(allocator: std.mem.Allocator, req: *http.Request, res: *http.Respons
         defer allocator.free(escaped_display_name);
         const escaped_created_at = try json_utils.escapeJson(allocator, post.created_at);
         defer allocator.free(escaped_created_at);
-        try res.body.writer().print("{{\"id\":{d},\"user_id\":{d},\"username\":\"{s}\",\"display_name\":\"{s}\",\"content\":\"{s}\",\"media_urls\":\"{s}\",\"reply_to_id\":{s},\"quote_to_id\":{s},\"poll_id\":{s},\"created_at\":\"{s}\",\"likes_count\":{d},\"comments_count\":{d},\"reposts_count\":{d},\"view_count\":{d},\"is_liked\":{s},\"is_reposted\":{s},\"is_bookmarked\":{s},\"is_pinned\":{s}}}", .{ post.id, post.user_id, escaped_username, escaped_display_name, escaped_content, if (post.media_urls) |m| m else "", if (post.reply_to_id) |id| try std.fmt.allocPrint(allocator, "{d}", .{id}) else "null", if (post.quote_to_id) |id| try std.fmt.allocPrint(allocator, "{d}", .{id}) else "null", if (post.poll_id) |id| try std.fmt.allocPrint(allocator, "{d}", .{id}) else "null", escaped_created_at, post.likes_count, post.comments_count, post.reposts_count, post.view_count, if (post.is_liked) "true" else "false", if (post.is_reposted) "true" else "false", if (post.is_bookmarked) "true" else "false", if (post.is_pinned) "true" else "false" });
+        try res.bodyWriter().print("{{\"id\":{d},\"user_id\":{d},\"username\":\"{s}\",\"display_name\":\"{s}\",\"content\":\"{s}\",\"media_urls\":\"{s}\",\"reply_to_id\":{s},\"quote_to_id\":{s},\"poll_id\":{s},\"created_at\":\"{s}\",\"likes_count\":{d},\"comments_count\":{d},\"reposts_count\":{d},\"view_count\":{d},\"is_liked\":{s},\"is_reposted\":{s},\"is_bookmarked\":{s},\"is_pinned\":{s}}}", .{ post.id, post.user_id, escaped_username, escaped_display_name, escaped_content, if (post.media_urls) |m| m else "", if (post.reply_to_id) |id| try std.fmt.allocPrint(allocator, "{d}", .{id}) else "null", if (post.quote_to_id) |id| try std.fmt.allocPrint(allocator, "{d}", .{id}) else "null", if (post.poll_id) |id| try std.fmt.allocPrint(allocator, "{d}", .{id}) else "null", escaped_created_at, post.likes_count, post.comments_count, post.reposts_count, post.view_count, if (post.is_liked) "true" else "false", if (post.is_reposted) "true" else "false", if (post.is_bookmarked) "true" else "false", if (post.is_pinned) "true" else "false" });
     }
 
-    try res.body.appendSlice("]");
+    try res.append("]");
 }
 
 pub fn get(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response) !void {
@@ -228,7 +228,7 @@ pub fn get(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response
     if (post_id == null) {
         res.status = 400;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Invalid post ID\"}");
+        try res.append("{\"error\":\"Invalid post ID\"}");
         return;
     }
 
@@ -268,7 +268,7 @@ pub fn get(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response
     if (rows.len == 0) {
         res.status = 404;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Post not found\"}");
+        try res.append("{\"error\":\"Post not found\"}");
         return;
     }
 
@@ -282,14 +282,14 @@ pub fn get(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response
     defer allocator.free(escaped_display_name);
     const escaped_created_at = try json_utils.escapeJson(allocator, post.created_at);
     defer allocator.free(escaped_created_at);
-    try res.body.writer().print("{{\"id\":{d},\"user_id\":{d},\"username\":\"{s}\",\"display_name\":\"{s}\",\"content\":\"{s}\",\"media_urls\":\"{s}\",\"reply_to_id\":{s},\"quote_to_id\":{s},\"poll_id\":{s},\"created_at\":\"{s}\",\"likes_count\":{d},\"comments_count\":{d},\"reposts_count\":{d},\"view_count\":{d},\"is_liked\":{s},\"is_reposted\":{s},\"is_bookmarked\":{s},\"is_pinned\":{s}}}", .{ post.id, post.user_id, escaped_username, escaped_display_name, escaped_content, if (post.media_urls) |m| m else "", if (post.reply_to_id) |id| try std.fmt.allocPrint(allocator, "{d}", .{id}) else "null", if (post.quote_to_id) |id| try std.fmt.allocPrint(allocator, "{d}", .{id}) else "null", if (post.poll_id) |id| try std.fmt.allocPrint(allocator, "{d}", .{id}) else "null", escaped_created_at, post.likes_count, post.comments_count, post.reposts_count, post.view_count, if (post.is_liked) "true" else "false", if (post.is_reposted) "true" else "false", if (post.is_bookmarked) "true" else "false", if (post.is_pinned) "true" else "false" });
+    try res.bodyWriter().print("{{\"id\":{d},\"user_id\":{d},\"username\":\"{s}\",\"display_name\":\"{s}\",\"content\":\"{s}\",\"media_urls\":\"{s}\",\"reply_to_id\":{s},\"quote_to_id\":{s},\"poll_id\":{s},\"created_at\":\"{s}\",\"likes_count\":{d},\"comments_count\":{d},\"reposts_count\":{d},\"view_count\":{d},\"is_liked\":{s},\"is_reposted\":{s},\"is_bookmarked\":{s},\"is_pinned\":{s}}}", .{ post.id, post.user_id, escaped_username, escaped_display_name, escaped_content, if (post.media_urls) |m| m else "", if (post.reply_to_id) |id| try std.fmt.allocPrint(allocator, "{d}", .{id}) else "null", if (post.quote_to_id) |id| try std.fmt.allocPrint(allocator, "{d}", .{id}) else "null", if (post.poll_id) |id| try std.fmt.allocPrint(allocator, "{d}", .{id}) else "null", escaped_created_at, post.likes_count, post.comments_count, post.reposts_count, post.view_count, if (post.is_liked) "true" else "false", if (post.is_reposted) "true" else "false", if (post.is_bookmarked) "true" else "false", if (post.is_pinned) "true" else "false" });
 }
 
 pub fn delete(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response) !void {
     const user_id = try auth.getUserIdFromRequest(allocator, req) orelse {
         res.status = 401;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Unauthorized\"}");
+        try res.append("{\"error\":\"Unauthorized\"}");
         return;
     };
 
@@ -310,7 +310,7 @@ pub fn delete(allocator: std.mem.Allocator, req: *http.Request, res: *http.Respo
     if (post_id == null) {
         res.status = 400;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Invalid post ID\"}");
+        try res.append("{\"error\":\"Invalid post ID\"}");
         return;
     }
 
@@ -323,19 +323,19 @@ pub fn delete(allocator: std.mem.Allocator, req: *http.Request, res: *http.Respo
     db.execute(sql, &[_][]const u8{ post_id_str, user_id_str }) catch {
         res.status = 500;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Failed to delete post\"}");
+        try res.append("{\"error\":\"Failed to delete post\"}");
         return;
     };
 
     res.headers.put("Content-Type", "application/json") catch {};
-    try res.body.appendSlice("{\"deleted\":true}");
+    try res.append("{\"deleted\":true}");
 }
 
 pub fn like(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response) !void {
     const user_id = try auth.getUserIdFromRequest(allocator, req) orelse {
         res.status = 401;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Unauthorized\"}");
+        try res.append("{\"error\":\"Unauthorized\"}");
         return;
     };
 
@@ -356,7 +356,7 @@ pub fn like(allocator: std.mem.Allocator, req: *http.Request, res: *http.Respons
     if (post_id == null) {
         res.status = 400;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Invalid post ID\"}");
+        try res.append("{\"error\":\"Invalid post ID\"}");
         return;
     }
 
@@ -369,7 +369,7 @@ pub fn like(allocator: std.mem.Allocator, req: *http.Request, res: *http.Respons
     db.execute(sql, &[_][]const u8{ user_id_str, post_id_str }) catch {
         res.status = 500;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Failed to like post\"}");
+        try res.append("{\"error\":\"Failed to like post\"}");
         return;
     };
 
@@ -387,14 +387,14 @@ pub fn like(allocator: std.mem.Allocator, req: *http.Request, res: *http.Respons
     }
 
     res.headers.put("Content-Type", "application/json") catch {};
-    try res.body.appendSlice("{\"liked\":true}");
+    try res.append("{\"liked\":true}");
 }
 
 pub fn unlike(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response) !void {
     const user_id = try auth.getUserIdFromRequest(allocator, req) orelse {
         res.status = 401;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Unauthorized\"}");
+        try res.append("{\"error\":\"Unauthorized\"}");
         return;
     };
 
@@ -415,7 +415,7 @@ pub fn unlike(allocator: std.mem.Allocator, req: *http.Request, res: *http.Respo
     if (post_id == null) {
         res.status = 400;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Invalid post ID\"}");
+        try res.append("{\"error\":\"Invalid post ID\"}");
         return;
     }
 
@@ -428,19 +428,19 @@ pub fn unlike(allocator: std.mem.Allocator, req: *http.Request, res: *http.Respo
     db.execute(sql, &[_][]const u8{ user_id_str, post_id_str }) catch {
         res.status = 500;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Failed to unlike post\"}");
+        try res.append("{\"error\":\"Failed to unlike post\"}");
         return;
     };
 
     res.headers.put("Content-Type", "application/json") catch {};
-    try res.body.appendSlice("{\"unliked\":true}");
+    try res.append("{\"unliked\":true}");
 }
 
 pub fn comment(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response) !void {
     const user_id = try auth.getUserIdFromRequest(allocator, req) orelse {
         res.status = 401;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Unauthorized\"}");
+        try res.append("{\"error\":\"Unauthorized\"}");
         return;
     };
 
@@ -461,7 +461,7 @@ pub fn comment(allocator: std.mem.Allocator, req: *http.Request, res: *http.Resp
     if (post_id == null) {
         res.status = 400;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Invalid post ID\"}");
+        try res.append("{\"error\":\"Invalid post ID\"}");
         return;
     }
 
@@ -477,7 +477,7 @@ pub fn comment(allocator: std.mem.Allocator, req: *http.Request, res: *http.Resp
     if (body.content.len == 0 or body.content.len > 280) {
         res.status = 400;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Content must be between 1 and 280 characters\"}");
+        try res.append("{\"error\":\"Content must be between 1 and 280 characters\"}");
         return;
     }
 
@@ -490,7 +490,7 @@ pub fn comment(allocator: std.mem.Allocator, req: *http.Request, res: *http.Resp
     db.execute(sql, &[_][]const u8{ user_id_str, post_id_str, body.content }) catch {
         res.status = 500;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Failed to add comment\"}");
+        try res.append("{\"error\":\"Failed to add comment\"}");
         return;
     };
 
@@ -511,7 +511,7 @@ pub fn comment(allocator: std.mem.Allocator, req: *http.Request, res: *http.Resp
 
     res.status = 201;
     res.headers.put("Content-Type", "application/json") catch {};
-    try res.body.writer().print("{{\"id\":{d},\"created\":true}}", .{comment_id});
+    try res.bodyWriter().print("{{\"id\":{d},\"created\":true}}", .{comment_id});
 }
 
 pub fn getComments(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response) !void {
@@ -532,7 +532,7 @@ pub fn getComments(allocator: std.mem.Allocator, req: *http.Request, res: *http.
     if (post_id == null) {
         res.status = 400;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Invalid post ID\"}");
+        try res.append("{\"error\":\"Invalid post ID\"}");
         return;
     }
 
@@ -561,16 +561,16 @@ pub fn getComments(allocator: std.mem.Allocator, req: *http.Request, res: *http.
     const rows = db.query(Comment, allocator, sql, &[_][]const u8{post_id_str}) catch {
         res.status = 500;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Failed to fetch comments\"}");
+        try res.append("{\"error\":\"Failed to fetch comments\"}");
         return;
     };
     defer db.freeRows(Comment, allocator, rows);
 
     res.headers.put("Content-Type", "application/json") catch {};
-    try res.body.appendSlice("[");
+    try res.append("[");
 
     for (rows, 0..) |row, idx| {
-        if (idx > 0) try res.body.appendSlice(",");
+        if (idx > 0) try res.append(",");
         const escaped_content = try json_utils.escapeJson(allocator, row.content);
         defer allocator.free(escaped_content);
         const escaped_username = try json_utils.escapeJson(allocator, row.username);
@@ -579,17 +579,17 @@ pub fn getComments(allocator: std.mem.Allocator, req: *http.Request, res: *http.
         defer allocator.free(escaped_display_name);
         const escaped_created_at = try json_utils.escapeJson(allocator, row.created_at);
         defer allocator.free(escaped_created_at);
-        try res.body.writer().print("{{\"id\":{d},\"user_id\":{d},\"username\":\"{s}\",\"display_name\":\"{s}\",\"content\":\"{s}\",\"created_at\":\"{s}\"}}", .{ row.id, row.user_id, escaped_username, escaped_display_name, escaped_content, escaped_created_at });
+        try res.bodyWriter().print("{{\"id\":{d},\"user_id\":{d},\"username\":\"{s}\",\"display_name\":\"{s}\",\"content\":\"{s}\",\"created_at\":\"{s}\"}}", .{ row.id, row.user_id, escaped_username, escaped_display_name, escaped_content, escaped_created_at });
     }
 
-    try res.body.appendSlice("]");
+    try res.append("]");
 }
 
 pub fn repost(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response) !void {
     const user_id = try auth.getUserIdFromRequest(allocator, req) orelse {
         res.status = 401;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Unauthorized\"}");
+        try res.append("{\"error\":\"Unauthorized\"}");
         return;
     };
 
@@ -610,7 +610,7 @@ pub fn repost(allocator: std.mem.Allocator, req: *http.Request, res: *http.Respo
     if (post_id == null) {
         res.status = 400;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Invalid post ID\"}");
+        try res.append("{\"error\":\"Invalid post ID\"}");
         return;
     }
 
@@ -623,7 +623,7 @@ pub fn repost(allocator: std.mem.Allocator, req: *http.Request, res: *http.Respo
     db.execute(sql, &[_][]const u8{ user_id_str, post_id_str }) catch {
         res.status = 500;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Failed to repost\"}");
+        try res.append("{\"error\":\"Failed to repost\"}");
         return;
     };
 
@@ -641,14 +641,14 @@ pub fn repost(allocator: std.mem.Allocator, req: *http.Request, res: *http.Respo
     }
 
     res.headers.put("Content-Type", "application/json") catch {};
-    try res.body.appendSlice("{\"reposted\":true}");
+    try res.append("{\"reposted\":true}");
 }
 
 pub fn unrepost(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response) !void {
     const user_id = try auth.getUserIdFromRequest(allocator, req) orelse {
         res.status = 401;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Unauthorized\"}");
+        try res.append("{\"error\":\"Unauthorized\"}");
         return;
     };
 
@@ -669,7 +669,7 @@ pub fn unrepost(allocator: std.mem.Allocator, req: *http.Request, res: *http.Res
     if (post_id == null) {
         res.status = 400;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Invalid post ID\"}");
+        try res.append("{\"error\":\"Invalid post ID\"}");
         return;
     }
 
@@ -682,19 +682,19 @@ pub fn unrepost(allocator: std.mem.Allocator, req: *http.Request, res: *http.Res
     db.execute(sql, &[_][]const u8{ user_id_str, post_id_str }) catch {
         res.status = 500;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Failed to unrepost\"}");
+        try res.append("{\"error\":\"Failed to unrepost\"}");
         return;
     };
 
     res.headers.put("Content-Type", "application/json") catch {};
-    try res.body.appendSlice("{\"unreposted\":true}");
+    try res.append("{\"unreposted\":true}");
 }
 
 pub fn bookmark(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response) !void {
     const user_id = try auth.getUserIdFromRequest(allocator, req) orelse {
         res.status = 401;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Unauthorized\"}");
+        try res.append("{\"error\":\"Unauthorized\"}");
         return;
     };
 
@@ -715,7 +715,7 @@ pub fn bookmark(allocator: std.mem.Allocator, req: *http.Request, res: *http.Res
     if (post_id == null) {
         res.status = 400;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Invalid post ID\"}");
+        try res.append("{\"error\":\"Invalid post ID\"}");
         return;
     }
 
@@ -728,19 +728,19 @@ pub fn bookmark(allocator: std.mem.Allocator, req: *http.Request, res: *http.Res
     db.execute(sql, &[_][]const u8{ user_id_str, post_id_str }) catch {
         res.status = 500;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Failed to bookmark\"}");
+        try res.append("{\"error\":\"Failed to bookmark\"}");
         return;
     };
 
     res.headers.put("Content-Type", "application/json") catch {};
-    try res.body.appendSlice("{\"bookmarked\":true}");
+    try res.append("{\"bookmarked\":true}");
 }
 
 pub fn unbookmark(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response) !void {
     const user_id = try auth.getUserIdFromRequest(allocator, req) orelse {
         res.status = 401;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Unauthorized\"}");
+        try res.append("{\"error\":\"Unauthorized\"}");
         return;
     };
 
@@ -761,7 +761,7 @@ pub fn unbookmark(allocator: std.mem.Allocator, req: *http.Request, res: *http.R
     if (post_id == null) {
         res.status = 400;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Invalid post ID\"}");
+        try res.append("{\"error\":\"Invalid post ID\"}");
         return;
     }
 
@@ -774,26 +774,26 @@ pub fn unbookmark(allocator: std.mem.Allocator, req: *http.Request, res: *http.R
     db.execute(sql, &[_][]const u8{ user_id_str, post_id_str }) catch {
         res.status = 500;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Failed to unbookmark\"}");
+        try res.append("{\"error\":\"Failed to unbookmark\"}");
         return;
     };
 
     res.headers.put("Content-Type", "application/json") catch {};
-    try res.body.appendSlice("{\"unbookmarked\":true}");
+    try res.append("{\"unbookmarked\":true}");
 }
 
 pub fn pinPost(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response) !void {
     const user_id = try auth.getUserIdFromRequest(allocator, req) orelse {
         res.status = 401;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Unauthorized\"}");
+        try res.append("{\"error\":\"Unauthorized\"}");
         return;
     };
 
     const post_id_str = req.params.get("id") orelse {
         res.status = 400;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Invalid post ID\"}");
+        try res.append("{\"error\":\"Invalid post ID\"}");
         return;
     };
 
@@ -806,7 +806,7 @@ pub fn pinPost(allocator: std.mem.Allocator, req: *http.Request, res: *http.Resp
         std.log.err("Failed to check ownership: {}", .{err});
         res.status = 500;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Failed to check ownership\"}");
+        try res.append("{\"error\":\"Failed to check ownership\"}");
         return;
     };
     defer db.freeRows(UserIdRow, allocator, check_rows);
@@ -814,14 +814,14 @@ pub fn pinPost(allocator: std.mem.Allocator, req: *http.Request, res: *http.Resp
     if (check_rows.len == 0) {
         res.status = 404;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Post not found\"}");
+        try res.append("{\"error\":\"Post not found\"}");
         return;
     }
 
     if (check_rows[0].user_id != user_id) {
         res.status = 403;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Not authorized to pin this post\"}");
+        try res.append("{\"error\":\"Not authorized to pin this post\"}");
         return;
     }
 
@@ -838,21 +838,21 @@ pub fn pinPost(allocator: std.mem.Allocator, req: *http.Request, res: *http.Resp
     );
 
     res.headers.put("Content-Type", "application/json") catch {};
-    try res.body.appendSlice("{\"pinned\":true}");
+    try res.append("{\"pinned\":true}");
 }
 
 pub fn unpinPost(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response) !void {
     const user_id = try auth.getUserIdFromRequest(allocator, req) orelse {
         res.status = 401;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Unauthorized\"}");
+        try res.append("{\"error\":\"Unauthorized\"}");
         return;
     };
 
     const post_id_str = req.params.get("id") orelse {
         res.status = 400;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Invalid post ID\"}");
+        try res.append("{\"error\":\"Invalid post ID\"}");
         return;
     };
 
@@ -865,7 +865,7 @@ pub fn unpinPost(allocator: std.mem.Allocator, req: *http.Request, res: *http.Re
     );
 
     res.headers.put("Content-Type", "application/json") catch {};
-    try res.body.appendSlice("{\"unpinned\":true}");
+    try res.append("{\"unpinned\":true}");
 }
 
 pub fn recordView(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response) !void {
@@ -874,14 +874,14 @@ pub fn recordView(allocator: std.mem.Allocator, req: *http.Request, res: *http.R
     const post_id_str = req.params.get("id") orelse {
         res.status = 400;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Invalid post ID\"}");
+        try res.append("{\"error\":\"Invalid post ID\"}");
         return;
     };
 
     const post_id = std.fmt.parseInt(i64, post_id_str, 10) catch {
         res.status = 400;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Invalid post ID\"}");
+        try res.append("{\"error\":\"Invalid post ID\"}");
         return;
     };
 
@@ -891,5 +891,5 @@ pub fn recordView(allocator: std.mem.Allocator, req: *http.Request, res: *http.R
     try analytics.recordView(allocator, post_id, user_id, ip_address);
 
     res.headers.put("Content-Type", "application/json") catch {};
-    try res.body.appendSlice("{\"recorded\":true}");
+    try res.append("{\"recorded\":true}");
 }

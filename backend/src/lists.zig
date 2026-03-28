@@ -28,7 +28,7 @@ pub fn getMyLists(allocator: std.mem.Allocator, req: *http.Request, res: *http.R
     const user_id = try auth.getUserIdFromRequest(allocator, req) orelse {
         res.status = 401;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Unauthorized\"}");
+        try res.append("{\"error\":\"Unauthorized\"}");
         return;
     };
 
@@ -48,33 +48,33 @@ pub fn getMyLists(allocator: std.mem.Allocator, req: *http.Request, res: *http.R
         std.log.err("Failed to get lists: {}", .{err});
         res.status = 500;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Failed to get lists\"}");
+        try res.append("{\"error\":\"Failed to get lists\"}");
         return;
     };
     defer db.freeRows(UserList, allocator, rows);
 
     res.headers.put("Content-Type", "application/json") catch {};
-    try res.body.writer().print("{{\"lists\":[", .{});
+    try res.bodyWriter().print("{{\"lists\":[", .{});
     for (rows, 0..) |row, i| {
-        if (i > 0) try res.body.writer().print(",", .{});
-        try res.body.writer().print("{{\"id\":{d},\"owner_id\":{d},\"name\":\"{s}\"", .{
+        if (i > 0) try res.bodyWriter().print(",", .{});
+        try res.bodyWriter().print("{{\"id\":{d},\"owner_id\":{d},\"name\":\"{s}\"", .{
             row.id, row.owner_id, row.name,
         });
         if (row.description) |desc| {
-            try res.body.writer().print(",\"description\":\"{s}\"", .{desc});
+            try res.bodyWriter().print(",\"description\":\"{s}\"", .{desc});
         }
-        try res.body.writer().print(",\"is_private\":{d},\"member_count\":{d},\"created_at\":\"{s}\"}}", .{
+        try res.bodyWriter().print(",\"is_private\":{d},\"member_count\":{d},\"created_at\":\"{s}\"}}", .{
             row.is_private, row.member_count, row.created_at,
         });
     }
-    try res.body.writer().print("]}}", .{});
+    try res.bodyWriter().print("]}}", .{});
 }
 
 pub fn createList(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response) !void {
     const user_id = try auth.getUserIdFromRequest(allocator, req) orelse {
         res.status = 401;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Unauthorized\"}");
+        try res.append("{\"error\":\"Unauthorized\"}");
         return;
     };
 
@@ -87,7 +87,7 @@ pub fn createList(allocator: std.mem.Allocator, req: *http.Request, res: *http.R
     }, allocator, body, .{}) catch {
         res.status = 400;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Invalid JSON\"}");
+        try res.append("{\"error\":\"Invalid JSON\"}");
         return;
     };
     defer parsed.deinit();
@@ -106,21 +106,21 @@ pub fn createList(allocator: std.mem.Allocator, req: *http.Request, res: *http.R
     );
 
     res.headers.put("Content-Type", "application/json") catch {};
-    try res.body.writer().print("{{\"id\":{d},\"message\":\"List created\"}}", .{db.lastInsertRowId()});
+    try res.bodyWriter().print("{{\"id\":{d},\"message\":\"List created\"}}", .{db.lastInsertRowId()});
 }
 
 pub fn getList(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response) !void {
     const user_id = try auth.getUserIdFromRequest(allocator, req) orelse {
         res.status = 401;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Unauthorized\"}");
+        try res.append("{\"error\":\"Unauthorized\"}");
         return;
     };
 
     const list_id_str = req.params.get("id") orelse {
         res.status = 400;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Missing list ID\"}");
+        try res.append("{\"error\":\"Missing list ID\"}");
         return;
     };
 
@@ -143,7 +143,7 @@ pub fn getList(allocator: std.mem.Allocator, req: *http.Request, res: *http.Resp
         std.log.err("Failed to get list: {}", .{err});
         res.status = 500;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Failed to get list\"}");
+        try res.append("{\"error\":\"Failed to get list\"}");
         return;
     };
     defer db.freeRows(UserList, allocator, list_rows);
@@ -151,7 +151,7 @@ pub fn getList(allocator: std.mem.Allocator, req: *http.Request, res: *http.Resp
     if (list_rows.len == 0) {
         res.status = 404;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"List not found or private\"}");
+        try res.append("{\"error\":\"List not found or private\"}");
         return;
     }
 
@@ -168,50 +168,50 @@ pub fn getList(allocator: std.mem.Allocator, req: *http.Request, res: *http.Resp
         std.log.err("Failed to get members: {}", .{err});
         res.status = 500;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Failed to get members\"}");
+        try res.append("{\"error\":\"Failed to get members\"}");
         return;
     };
     defer db.freeRows(ListMember, allocator, member_rows);
 
     res.headers.put("Content-Type", "application/json") catch {};
     const list = list_rows[0];
-    try res.body.writer().print("{{\"list\":{{\"id\":{d},\"owner_id\":{d},\"name\":\"{s}\"", .{
+    try res.bodyWriter().print("{{\"list\":{{\"id\":{d},\"owner_id\":{d},\"name\":\"{s}\"", .{
         list.id, list.owner_id, list.name,
     });
     if (list.description) |desc| {
-        try res.body.writer().print(",\"description\":\"{s}\"", .{desc});
+        try res.bodyWriter().print(",\"description\":\"{s}\"", .{desc});
     }
-    try res.body.writer().print(",\"is_private\":{d},\"member_count\":{d},\"created_at\":\"{s}\"}},\"members\":[", .{
+    try res.bodyWriter().print(",\"is_private\":{d},\"member_count\":{d},\"created_at\":\"{s}\"}},\"members\":[", .{
         list.is_private, list.member_count, list.created_at,
     });
     for (member_rows, 0..) |member, i| {
-        if (i > 0) try res.body.writer().print(",", .{});
-        try res.body.writer().print("{{\"id\":{d},\"username\":\"{s}\"", .{
+        if (i > 0) try res.bodyWriter().print(",", .{});
+        try res.bodyWriter().print("{{\"id\":{d},\"username\":\"{s}\"", .{
             member.id, member.username,
         });
         if (member.display_name) |name| {
-            try res.body.writer().print(",\"display_name\":\"{s}\"", .{name});
+            try res.bodyWriter().print(",\"display_name\":\"{s}\"", .{name});
         }
         if (member.avatar_url) |url| {
-            try res.body.writer().print(",\"avatar_url\":\"{s}\"", .{url});
+            try res.bodyWriter().print(",\"avatar_url\":\"{s}\"", .{url});
         }
-        try res.body.writer().print(",\"added_at\":\"{s}\"}}", .{member.added_at});
+        try res.bodyWriter().print(",\"added_at\":\"{s}\"}}", .{member.added_at});
     }
-    try res.body.writer().print("]}}", .{});
+    try res.bodyWriter().print("]}}", .{});
 }
 
 pub fn deleteList(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response) !void {
     const user_id = try auth.getUserIdFromRequest(allocator, req) orelse {
         res.status = 401;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Unauthorized\"}");
+        try res.append("{\"error\":\"Unauthorized\"}");
         return;
     };
 
     const list_id_str = req.params.get("id") orelse {
         res.status = 400;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Missing list ID\"}");
+        try res.append("{\"error\":\"Missing list ID\"}");
         return;
     };
 
@@ -224,7 +224,7 @@ pub fn deleteList(allocator: std.mem.Allocator, req: *http.Request, res: *http.R
         std.log.err("Failed to check ownership: {}", .{err});
         res.status = 500;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Failed to check ownership\"}");
+        try res.append("{\"error\":\"Failed to check ownership\"}");
         return;
     };
     defer db.freeRows(OwnerIdRow, allocator, check_rows);
@@ -232,34 +232,34 @@ pub fn deleteList(allocator: std.mem.Allocator, req: *http.Request, res: *http.R
     if (check_rows.len == 0) {
         res.status = 404;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"List not found\"}");
+        try res.append("{\"error\":\"List not found\"}");
         return;
     }
 
     if (check_rows[0].owner_id != user_id) {
         res.status = 403;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Not authorized to delete this list\"}");
+        try res.append("{\"error\":\"Not authorized to delete this list\"}");
         return;
     }
 
     try db.execute("DELETE FROM user_lists WHERE id = ?", &[_][]const u8{list_id_str});
     res.headers.put("Content-Type", "application/json") catch {};
-    try res.body.appendSlice("{\"message\":\"List deleted\"}");
+    try res.append("{\"message\":\"List deleted\"}");
 }
 
 pub fn addMember(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response) !void {
     const user_id = try auth.getUserIdFromRequest(allocator, req) orelse {
         res.status = 401;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Unauthorized\"}");
+        try res.append("{\"error\":\"Unauthorized\"}");
         return;
     };
 
     const list_id_str = req.params.get("id") orelse {
         res.status = 400;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Missing list ID\"}");
+        try res.append("{\"error\":\"Missing list ID\"}");
         return;
     };
 
@@ -272,7 +272,7 @@ pub fn addMember(allocator: std.mem.Allocator, req: *http.Request, res: *http.Re
         std.log.err("Failed to check ownership: {}", .{err});
         res.status = 500;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Failed to check ownership\"}");
+        try res.append("{\"error\":\"Failed to check ownership\"}");
         return;
     };
     defer db.freeRows(OwnerIdRow, allocator, check_rows);
@@ -280,14 +280,14 @@ pub fn addMember(allocator: std.mem.Allocator, req: *http.Request, res: *http.Re
     if (check_rows.len == 0) {
         res.status = 404;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"List not found\"}");
+        try res.append("{\"error\":\"List not found\"}");
         return;
     }
 
     if (check_rows[0].owner_id != user_id) {
         res.status = 403;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Not authorized to modify this list\"}");
+        try res.append("{\"error\":\"Not authorized to modify this list\"}");
         return;
     }
 
@@ -296,7 +296,7 @@ pub fn addMember(allocator: std.mem.Allocator, req: *http.Request, res: *http.Re
     const parsed = std.json.parseFromSlice(struct { user_id: i64 }, allocator, body, .{}) catch {
         res.status = 400;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Invalid JSON\"}");
+        try res.append("{\"error\":\"Invalid JSON\"}");
         return;
     };
     defer parsed.deinit();
@@ -310,28 +310,28 @@ pub fn addMember(allocator: std.mem.Allocator, req: *http.Request, res: *http.Re
     );
 
     res.headers.put("Content-Type", "application/json") catch {};
-    try res.body.appendSlice("{\"message\":\"Member added\"}");
+    try res.append("{\"message\":\"Member added\"}");
 }
 
 pub fn removeMember(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response) !void {
     const user_id = try auth.getUserIdFromRequest(allocator, req) orelse {
         res.status = 401;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Unauthorized\"}");
+        try res.append("{\"error\":\"Unauthorized\"}");
         return;
     };
 
     const list_id_str = req.params.get("id") orelse {
         res.status = 400;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Missing list ID\"}");
+        try res.append("{\"error\":\"Missing list ID\"}");
         return;
     };
 
     const member_id_str = req.params.get("user_id") orelse {
         res.status = 400;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Missing user ID\"}");
+        try res.append("{\"error\":\"Missing user ID\"}");
         return;
     };
 
@@ -344,7 +344,7 @@ pub fn removeMember(allocator: std.mem.Allocator, req: *http.Request, res: *http
         std.log.err("Failed to check ownership: {}", .{err});
         res.status = 500;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Failed to check ownership\"}");
+        try res.append("{\"error\":\"Failed to check ownership\"}");
         return;
     };
     defer db.freeRows(OwnerIdRow, allocator, check_rows);
@@ -352,14 +352,14 @@ pub fn removeMember(allocator: std.mem.Allocator, req: *http.Request, res: *http
     if (check_rows.len == 0) {
         res.status = 404;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"List not found\"}");
+        try res.append("{\"error\":\"List not found\"}");
         return;
     }
 
     if (check_rows[0].owner_id != user_id) {
         res.status = 403;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Not authorized to modify this list\"}");
+        try res.append("{\"error\":\"Not authorized to modify this list\"}");
         return;
     }
 
@@ -369,21 +369,21 @@ pub fn removeMember(allocator: std.mem.Allocator, req: *http.Request, res: *http
     );
 
     res.headers.put("Content-Type", "application/json") catch {};
-    try res.body.appendSlice("{\"message\":\"Member removed\"}");
+    try res.append("{\"message\":\"Member removed\"}");
 }
 
 pub fn getListTimeline(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response) !void {
     const user_id = try auth.getUserIdFromRequest(allocator, req) orelse {
         res.status = 401;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Unauthorized\"}");
+        try res.append("{\"error\":\"Unauthorized\"}");
         return;
     };
 
     const list_id_str = req.params.get("id") orelse {
         res.status = 400;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Missing list ID\"}");
+        try res.append("{\"error\":\"Missing list ID\"}");
         return;
     };
 
@@ -402,7 +402,7 @@ pub fn getListTimeline(allocator: std.mem.Allocator, req: *http.Request, res: *h
         std.log.err("Failed to check access: {}", .{err});
         res.status = 500;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Failed to check access\"}");
+        try res.append("{\"error\":\"Failed to check access\"}");
         return;
     };
     defer db.freeRows(DummyRow, allocator, check_rows);
@@ -410,7 +410,7 @@ pub fn getListTimeline(allocator: std.mem.Allocator, req: *http.Request, res: *h
     if (check_rows.len == 0) {
         res.status = 404;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"List not found or private\"}");
+        try res.append("{\"error\":\"List not found or private\"}");
         return;
     }
 
@@ -455,34 +455,34 @@ pub fn getListTimeline(allocator: std.mem.Allocator, req: *http.Request, res: *h
         std.log.err("Failed to get list timeline: {}", .{err});
         res.status = 500;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Failed to get list timeline\"}");
+        try res.append("{\"error\":\"Failed to get list timeline\"}");
         return;
     };
     defer db.freeRows(Post, allocator, rows);
 
     res.headers.put("Content-Type", "application/json") catch {};
-    try res.body.writer().print("{{\"posts\":[", .{});
+    try res.bodyWriter().print("{{\"posts\":[", .{});
     for (rows, 0..) |row, i| {
-        if (i > 0) try res.body.writer().print(",", .{});
-        try res.body.writer().print("{{\"id\":{d},\"user_id\":{d},\"username\":\"{s}\"", .{
+        if (i > 0) try res.bodyWriter().print(",", .{});
+        try res.bodyWriter().print("{{\"id\":{d},\"user_id\":{d},\"username\":\"{s}\"", .{
             row.id, row.user_id, row.username,
         });
         if (row.display_name) |name| {
-            try res.body.writer().print(",\"display_name\":\"{s}\"", .{name});
+            try res.bodyWriter().print(",\"display_name\":\"{s}\"", .{name});
         }
         if (row.avatar_url) |url| {
-            try res.body.writer().print(",\"avatar_url\":\"{s}\"", .{url});
+            try res.bodyWriter().print(",\"avatar_url\":\"{s}\"", .{url});
         }
-        try res.body.writer().print(",\"content\":\"{s}\"", .{row.content});
+        try res.bodyWriter().print(",\"content\":\"{s}\"", .{row.content});
         if (row.media_urls) |urls| {
-            try res.body.writer().print(",\"media_urls\":\"{s}\"", .{urls});
+            try res.bodyWriter().print(",\"media_urls\":\"{s}\"", .{urls});
         }
         if (row.reply_to_id) |reply| {
-            try res.body.writer().print(",\"reply_to_id\":{d}", .{reply});
+            try res.bodyWriter().print(",\"reply_to_id\":{d}", .{reply});
         }
-        try res.body.writer().print(",\"created_at\":\"{s}\",\"likes_count\":{d},\"comments_count\":{d},\"reposts_count\":{d},\"is_liked\":{d},\"is_reposted\":{d}}}", .{
+        try res.bodyWriter().print(",\"created_at\":\"{s}\",\"likes_count\":{d},\"comments_count\":{d},\"reposts_count\":{d},\"is_liked\":{d},\"is_reposted\":{d}}}", .{
             row.created_at, row.likes_count, row.comments_count, row.reposts_count, row.is_liked, row.is_reposted,
         });
     }
-    try res.body.writer().print("]}}", .{});
+    try res.bodyWriter().print("]}}", .{});
 }

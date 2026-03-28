@@ -11,14 +11,14 @@ pub fn blockUser(allocator: std.mem.Allocator, req: *http.Request, res: *http.Re
     const user_id = try auth.getUserIdFromRequest(allocator, req) orelse {
         res.status = 401;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Unauthorized\"}");
+        try res.append("{\"error\":\"Unauthorized\"}");
         return;
     };
 
     const blocked_username = req.params.get("username") orelse {
         res.status = 400;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Missing username\"}");
+        try res.append("{\"error\":\"Missing username\"}");
         return;
     };
 
@@ -28,7 +28,7 @@ pub fn blockUser(allocator: std.mem.Allocator, req: *http.Request, res: *http.Re
         std.log.err("Failed to get user: {}", .{err});
         res.status = 500;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Failed to get user\"}");
+        try res.append("{\"error\":\"Failed to get user\"}");
         return;
     };
     defer db.freeRows(UserIdRow, allocator, user_rows);
@@ -36,7 +36,7 @@ pub fn blockUser(allocator: std.mem.Allocator, req: *http.Request, res: *http.Re
     if (user_rows.len == 0) {
         res.status = 404;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"User not found\"}");
+        try res.append("{\"error\":\"User not found\"}");
         return;
     }
 
@@ -44,7 +44,7 @@ pub fn blockUser(allocator: std.mem.Allocator, req: *http.Request, res: *http.Re
     if (blocked_id == user_id) {
         res.status = 400;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Cannot block yourself\"}");
+        try res.append("{\"error\":\"Cannot block yourself\"}");
         return;
     }
 
@@ -70,21 +70,21 @@ pub fn blockUser(allocator: std.mem.Allocator, req: *http.Request, res: *http.Re
     );
 
     res.headers.put("Content-Type", "application/json") catch {};
-    try res.body.appendSlice("{\"message\":\"User blocked\"}");
+    try res.append("{\"message\":\"User blocked\"}");
 }
 
 pub fn unblockUser(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response) !void {
     const user_id = try auth.getUserIdFromRequest(allocator, req) orelse {
         res.status = 401;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Unauthorized\"}");
+        try res.append("{\"error\":\"Unauthorized\"}");
         return;
     };
 
     const blocked_username = req.params.get("username") orelse {
         res.status = 400;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Missing username\"}");
+        try res.append("{\"error\":\"Missing username\"}");
         return;
     };
 
@@ -94,7 +94,7 @@ pub fn unblockUser(allocator: std.mem.Allocator, req: *http.Request, res: *http.
         std.log.err("Failed to get user: {}", .{err});
         res.status = 500;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Failed to get user\"}");
+        try res.append("{\"error\":\"Failed to get user\"}");
         return;
     };
     defer db.freeRows(UserIdRow, allocator, user_rows);
@@ -102,7 +102,7 @@ pub fn unblockUser(allocator: std.mem.Allocator, req: *http.Request, res: *http.
     if (user_rows.len == 0) {
         res.status = 404;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"User not found\"}");
+        try res.append("{\"error\":\"User not found\"}");
         return;
     }
 
@@ -118,14 +118,14 @@ pub fn unblockUser(allocator: std.mem.Allocator, req: *http.Request, res: *http.
     );
 
     res.headers.put("Content-Type", "application/json") catch {};
-    try res.body.appendSlice("{\"message\":\"User unblocked\"}");
+    try res.append("{\"message\":\"User unblocked\"}");
 }
 
 pub fn getBlockedUsers(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response) !void {
     const user_id = try auth.getUserIdFromRequest(allocator, req) orelse {
         res.status = 401;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Unauthorized\"}");
+        try res.append("{\"error\":\"Unauthorized\"}");
         return;
     };
 
@@ -152,41 +152,41 @@ pub fn getBlockedUsers(allocator: std.mem.Allocator, req: *http.Request, res: *h
         std.log.err("Failed to get blocked users: {}", .{err});
         res.status = 500;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Failed to get blocked users\"}");
+        try res.append("{\"error\":\"Failed to get blocked users\"}");
         return;
     };
     defer db.freeRows(BlockedUser, allocator, rows);
 
     res.headers.put("Content-Type", "application/json") catch {};
-    try res.body.writer().print("{{\"blocked_users\":[", .{});
+    try res.bodyWriter().print("{{\"blocked_users\":[", .{});
     for (rows, 0..) |row, i| {
-        if (i > 0) try res.body.writer().print(",", .{});
-        try res.body.writer().print("{{\"id\":{d},\"username\":\"{s}\"", .{
+        if (i > 0) try res.bodyWriter().print(",", .{});
+        try res.bodyWriter().print("{{\"id\":{d},\"username\":\"{s}\"", .{
             row.id, row.username,
         });
         if (row.display_name) |name| {
-            try res.body.writer().print(",\"display_name\":\"{s}\"", .{name});
+            try res.bodyWriter().print(",\"display_name\":\"{s}\"", .{name});
         }
         if (row.avatar_url) |url| {
-            try res.body.writer().print(",\"avatar_url\":\"{s}\"", .{url});
+            try res.bodyWriter().print(",\"avatar_url\":\"{s}\"", .{url});
         }
-        try res.body.writer().print(",\"blocked_at\":\"{s}\"}}", .{row.created_at});
+        try res.bodyWriter().print(",\"blocked_at\":\"{s}\"}}", .{row.created_at});
     }
-    try res.body.writer().print("]}}", .{});
+    try res.bodyWriter().print("]}}", .{});
 }
 
 pub fn muteUser(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response) !void {
     const user_id = try auth.getUserIdFromRequest(allocator, req) orelse {
         res.status = 401;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Unauthorized\"}");
+        try res.append("{\"error\":\"Unauthorized\"}");
         return;
     };
 
     const muted_username = req.params.get("username") orelse {
         res.status = 400;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Missing username\"}");
+        try res.append("{\"error\":\"Missing username\"}");
         return;
     };
 
@@ -196,7 +196,7 @@ pub fn muteUser(allocator: std.mem.Allocator, req: *http.Request, res: *http.Res
         std.log.err("Failed to get user: {}", .{err});
         res.status = 500;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Failed to get user\"}");
+        try res.append("{\"error\":\"Failed to get user\"}");
         return;
     };
     defer db.freeRows(UserIdRow, allocator, user_rows);
@@ -204,7 +204,7 @@ pub fn muteUser(allocator: std.mem.Allocator, req: *http.Request, res: *http.Res
     if (user_rows.len == 0) {
         res.status = 404;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"User not found\"}");
+        try res.append("{\"error\":\"User not found\"}");
         return;
     }
 
@@ -212,7 +212,7 @@ pub fn muteUser(allocator: std.mem.Allocator, req: *http.Request, res: *http.Res
     if (muted_id == user_id) {
         res.status = 400;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Cannot mute yourself\"}");
+        try res.append("{\"error\":\"Cannot mute yourself\"}");
         return;
     }
 
@@ -227,21 +227,21 @@ pub fn muteUser(allocator: std.mem.Allocator, req: *http.Request, res: *http.Res
     );
 
     res.headers.put("Content-Type", "application/json") catch {};
-    try res.body.appendSlice("{\"message\":\"User muted\"}");
+    try res.append("{\"message\":\"User muted\"}");
 }
 
 pub fn unmuteUser(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response) !void {
     const user_id = try auth.getUserIdFromRequest(allocator, req) orelse {
         res.status = 401;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Unauthorized\"}");
+        try res.append("{\"error\":\"Unauthorized\"}");
         return;
     };
 
     const muted_username = req.params.get("username") orelse {
         res.status = 400;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Missing username\"}");
+        try res.append("{\"error\":\"Missing username\"}");
         return;
     };
 
@@ -251,7 +251,7 @@ pub fn unmuteUser(allocator: std.mem.Allocator, req: *http.Request, res: *http.R
         std.log.err("Failed to get user: {}", .{err});
         res.status = 500;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Failed to get user\"}");
+        try res.append("{\"error\":\"Failed to get user\"}");
         return;
     };
     defer db.freeRows(UserIdRow, allocator, user_rows);
@@ -259,7 +259,7 @@ pub fn unmuteUser(allocator: std.mem.Allocator, req: *http.Request, res: *http.R
     if (user_rows.len == 0) {
         res.status = 404;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"User not found\"}");
+        try res.append("{\"error\":\"User not found\"}");
         return;
     }
 
@@ -275,14 +275,14 @@ pub fn unmuteUser(allocator: std.mem.Allocator, req: *http.Request, res: *http.R
     );
 
     res.headers.put("Content-Type", "application/json") catch {};
-    try res.body.appendSlice("{\"message\":\"User unmuted\"}");
+    try res.append("{\"message\":\"User unmuted\"}");
 }
 
 pub fn getMutedUsers(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response) !void {
     const user_id = try auth.getUserIdFromRequest(allocator, req) orelse {
         res.status = 401;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Unauthorized\"}");
+        try res.append("{\"error\":\"Unauthorized\"}");
         return;
     };
 
@@ -309,27 +309,27 @@ pub fn getMutedUsers(allocator: std.mem.Allocator, req: *http.Request, res: *htt
         std.log.err("Failed to get muted users: {}", .{err});
         res.status = 500;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Failed to get muted users\"}");
+        try res.append("{\"error\":\"Failed to get muted users\"}");
         return;
     };
     defer db.freeRows(MutedUser, allocator, rows);
 
     res.headers.put("Content-Type", "application/json") catch {};
-    try res.body.writer().print("{{\"muted_users\":[", .{});
+    try res.bodyWriter().print("{{\"muted_users\":[", .{});
     for (rows, 0..) |row, i| {
-        if (i > 0) try res.body.writer().print(",", .{});
-        try res.body.writer().print("{{\"id\":{d},\"username\":\"{s}\"", .{
+        if (i > 0) try res.bodyWriter().print(",", .{});
+        try res.bodyWriter().print("{{\"id\":{d},\"username\":\"{s}\"", .{
             row.id, row.username,
         });
         if (row.display_name) |name| {
-            try res.body.writer().print(",\"display_name\":\"{s}\"", .{name});
+            try res.bodyWriter().print(",\"display_name\":\"{s}\"", .{name});
         }
         if (row.avatar_url) |url| {
-            try res.body.writer().print(",\"avatar_url\":\"{s}\"", .{url});
+            try res.bodyWriter().print(",\"avatar_url\":\"{s}\"", .{url});
         }
-        try res.body.writer().print(",\"muted_at\":\"{s}\"}}", .{row.created_at});
+        try res.bodyWriter().print(",\"muted_at\":\"{s}\"}}", .{row.created_at});
     }
-    try res.body.writer().print("]}}", .{});
+    try res.bodyWriter().print("]}}", .{});
 }
 
 pub fn isBlocked(allocator: std.mem.Allocator, user_id: i64, other_id: i64) !bool {

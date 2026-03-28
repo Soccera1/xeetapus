@@ -38,7 +38,7 @@ pub fn getProfile(allocator: std.mem.Allocator, req: *http.Request, res: *http.R
     if (username == null) {
         res.status = 400;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Username required\"}");
+        try res.append("{\"error\":\"Username required\"}");
         return;
     }
 
@@ -62,7 +62,7 @@ pub fn getProfile(allocator: std.mem.Allocator, req: *http.Request, res: *http.R
     const rows = db.query(Profile, allocator, sql, &params) catch {
         res.status = 500;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Failed to fetch profile\"}");
+        try res.append("{\"error\":\"Failed to fetch profile\"}");
         return;
     };
     defer db.freeRows(Profile, allocator, rows);
@@ -70,7 +70,7 @@ pub fn getProfile(allocator: std.mem.Allocator, req: *http.Request, res: *http.R
     if (rows.len == 0) {
         res.status = 404;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"User not found\"}");
+        try res.append("{\"error\":\"User not found\"}");
         return;
     }
 
@@ -86,7 +86,7 @@ pub fn getProfile(allocator: std.mem.Allocator, req: *http.Request, res: *http.R
     defer allocator.free(escaped_avatar_url);
     const escaped_created_at = try json_utils.escapeJson(allocator, profile.created_at);
     defer allocator.free(escaped_created_at);
-    try res.body.writer().print("{{\"id\":{d},\"username\":\"{s}\",\"display_name\":\"{s}\",\"bio\":\"{s}\",\"avatar_url\":\"{s}\",\"created_at\":\"{s}\",\"followers_count\":{d},\"following_count\":{d},\"posts_count\":{d},\"is_following\":{s}}}", .{ profile.id, escaped_username, escaped_display_name, escaped_bio, escaped_avatar_url, escaped_created_at, profile.followers_count, profile.following_count, profile.posts_count, if (profile.is_following) "true" else "false" });
+    try res.bodyWriter().print("{{\"id\":{d},\"username\":\"{s}\",\"display_name\":\"{s}\",\"bio\":\"{s}\",\"avatar_url\":\"{s}\",\"created_at\":\"{s}\",\"followers_count\":{d},\"following_count\":{d},\"posts_count\":{d},\"is_following\":{s}}}", .{ profile.id, escaped_username, escaped_display_name, escaped_bio, escaped_avatar_url, escaped_created_at, profile.followers_count, profile.following_count, profile.posts_count, if (profile.is_following) "true" else "false" });
 }
 
 pub fn getPosts(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response) !void {
@@ -109,7 +109,7 @@ pub fn getPosts(allocator: std.mem.Allocator, req: *http.Request, res: *http.Res
     if (username == null) {
         res.status = 400;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Username required\"}");
+        try res.append("{\"error\":\"Username required\"}");
         return;
     }
 
@@ -150,16 +150,16 @@ pub fn getPosts(allocator: std.mem.Allocator, req: *http.Request, res: *http.Res
     const rows = db.query(Post, allocator, sql, &params) catch {
         res.status = 500;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Failed to fetch posts\"}");
+        try res.append("{\"error\":\"Failed to fetch posts\"}");
         return;
     };
     defer db.freeRows(Post, allocator, rows);
 
     res.headers.put("Content-Type", "application/json") catch {};
-    try res.body.appendSlice("[");
+    try res.append("[");
 
     for (rows, 0..) |post, idx| {
-        if (idx > 0) try res.body.appendSlice(",");
+        if (idx > 0) try res.append(",");
         const escaped_content = try json_utils.escapeJson(allocator, post.content);
         defer allocator.free(escaped_content);
         const escaped_username = try json_utils.escapeJson(allocator, post.username);
@@ -168,17 +168,17 @@ pub fn getPosts(allocator: std.mem.Allocator, req: *http.Request, res: *http.Res
         defer allocator.free(escaped_display_name);
         const escaped_created_at = try json_utils.escapeJson(allocator, post.created_at);
         defer allocator.free(escaped_created_at);
-        try res.body.writer().print("{{\"id\":{d},\"user_id\":{d},\"username\":\"{s}\",\"display_name\":\"{s}\",\"content\":\"{s}\",\"created_at\":\"{s}\",\"likes_count\":{d},\"comments_count\":{d},\"is_liked\":{s}}}", .{ post.id, post.user_id, escaped_username, escaped_display_name, escaped_content, escaped_created_at, post.likes_count, post.comments_count, if (post.is_liked) "true" else "false" });
+        try res.bodyWriter().print("{{\"id\":{d},\"user_id\":{d},\"username\":\"{s}\",\"display_name\":\"{s}\",\"content\":\"{s}\",\"created_at\":\"{s}\",\"likes_count\":{d},\"comments_count\":{d},\"is_liked\":{s}}}", .{ post.id, post.user_id, escaped_username, escaped_display_name, escaped_content, escaped_created_at, post.likes_count, post.comments_count, if (post.is_liked) "true" else "false" });
     }
 
-    try res.body.appendSlice("]");
+    try res.append("]");
 }
 
 pub fn follow(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response) !void {
     const follower_id = try auth.getUserIdFromRequest(allocator, req) orelse {
         res.status = 401;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Unauthorized\"}");
+        try res.append("{\"error\":\"Unauthorized\"}");
         return;
     };
 
@@ -199,7 +199,7 @@ pub fn follow(allocator: std.mem.Allocator, req: *http.Request, res: *http.Respo
     if (username == null) {
         res.status = 400;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Username required\"}");
+        try res.append("{\"error\":\"Username required\"}");
         return;
     }
 
@@ -218,7 +218,7 @@ pub fn follow(allocator: std.mem.Allocator, req: *http.Request, res: *http.Respo
     if (target_rows.len == 0) {
         res.status = 404;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"User not found\"}");
+        try res.append("{\"error\":\"User not found\"}");
         return;
     }
 
@@ -227,7 +227,7 @@ pub fn follow(allocator: std.mem.Allocator, req: *http.Request, res: *http.Respo
     if (follower_id == following_id) {
         res.status = 400;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Cannot follow yourself\"}");
+        try res.append("{\"error\":\"Cannot follow yourself\"}");
         return;
     }
 
@@ -240,7 +240,7 @@ pub fn follow(allocator: std.mem.Allocator, req: *http.Request, res: *http.Respo
     db.execute(sql, &[_][]const u8{ follower_str, following_str }) catch {
         res.status = 500;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Failed to follow user\"}");
+        try res.append("{\"error\":\"Failed to follow user\"}");
         return;
     };
 
@@ -248,14 +248,14 @@ pub fn follow(allocator: std.mem.Allocator, req: *http.Request, res: *http.Respo
     try notifications.create(following_id, follower_id, "follow", null);
 
     res.headers.put("Content-Type", "application/json") catch {};
-    try res.body.appendSlice("{\"following\":true}");
+    try res.append("{\"following\":true}");
 }
 
 pub fn unfollow(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response) !void {
     const follower_id = try auth.getUserIdFromRequest(allocator, req) orelse {
         res.status = 401;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Unauthorized\"}");
+        try res.append("{\"error\":\"Unauthorized\"}");
         return;
     };
 
@@ -276,7 +276,7 @@ pub fn unfollow(allocator: std.mem.Allocator, req: *http.Request, res: *http.Res
     if (username == null) {
         res.status = 400;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Username required\"}");
+        try res.append("{\"error\":\"Username required\"}");
         return;
     }
 
@@ -295,7 +295,7 @@ pub fn unfollow(allocator: std.mem.Allocator, req: *http.Request, res: *http.Res
     if (target_rows.len == 0) {
         res.status = 404;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"User not found\"}");
+        try res.append("{\"error\":\"User not found\"}");
         return;
     }
 
@@ -310,12 +310,12 @@ pub fn unfollow(allocator: std.mem.Allocator, req: *http.Request, res: *http.Res
     db.execute(sql, &[_][]const u8{ follower_str, following_str }) catch {
         res.status = 500;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Failed to unfollow user\"}");
+        try res.append("{\"error\":\"Failed to unfollow user\"}");
         return;
     };
 
     res.headers.put("Content-Type", "application/json") catch {};
-    try res.body.appendSlice("{\"unfollowed\":true}");
+    try res.append("{\"unfollowed\":true}");
 }
 
 pub fn getFollowers(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response) !void {
@@ -336,7 +336,7 @@ pub fn getFollowers(allocator: std.mem.Allocator, req: *http.Request, res: *http
     if (username == null) {
         res.status = 400;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Username required\"}");
+        try res.append("{\"error\":\"Username required\"}");
         return;
     }
 
@@ -358,26 +358,26 @@ pub fn getFollowers(allocator: std.mem.Allocator, req: *http.Request, res: *http
     const rows = db.query(User, allocator, sql, &[_][]const u8{username.?}) catch {
         res.status = 500;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Failed to fetch followers\"}");
+        try res.append("{\"error\":\"Failed to fetch followers\"}");
         return;
     };
     defer db.freeRows(User, allocator, rows);
 
     res.headers.put("Content-Type", "application/json") catch {};
-    try res.body.appendSlice("[");
+    try res.append("[");
 
     for (rows, 0..) |user, idx| {
-        if (idx > 0) try res.body.appendSlice(",");
+        if (idx > 0) try res.append(",");
         const escaped_username = try json_utils.escapeJson(allocator, user.username);
         defer allocator.free(escaped_username);
         const escaped_display_name = try json_utils.escapeJson(allocator, user.display_name);
         defer allocator.free(escaped_display_name);
         const escaped_avatar_url = try json_utils.escapeJson(allocator, user.avatar_url);
         defer allocator.free(escaped_avatar_url);
-        try res.body.writer().print("{{\"id\":{d},\"username\":\"{s}\",\"display_name\":\"{s}\",\"avatar_url\":\"{s}\"}}", .{ user.id, escaped_username, escaped_display_name, escaped_avatar_url });
+        try res.bodyWriter().print("{{\"id\":{d},\"username\":\"{s}\",\"display_name\":\"{s}\",\"avatar_url\":\"{s}\"}}", .{ user.id, escaped_username, escaped_display_name, escaped_avatar_url });
     }
 
-    try res.body.appendSlice("]");
+    try res.append("]");
 }
 
 pub fn getFollowing(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response) !void {
@@ -398,7 +398,7 @@ pub fn getFollowing(allocator: std.mem.Allocator, req: *http.Request, res: *http
     if (username == null) {
         res.status = 400;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Username required\"}");
+        try res.append("{\"error\":\"Username required\"}");
         return;
     }
 
@@ -420,26 +420,26 @@ pub fn getFollowing(allocator: std.mem.Allocator, req: *http.Request, res: *http
     const rows = db.query(User, allocator, sql, &[_][]const u8{username.?}) catch {
         res.status = 500;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Failed to fetch following\"}");
+        try res.append("{\"error\":\"Failed to fetch following\"}");
         return;
     };
     defer db.freeRows(User, allocator, rows);
 
     res.headers.put("Content-Type", "application/json") catch {};
-    try res.body.appendSlice("[");
+    try res.append("[");
 
     for (rows, 0..) |user, idx| {
-        if (idx > 0) try res.body.appendSlice(",");
+        if (idx > 0) try res.append(",");
         const escaped_username = try json_utils.escapeJson(allocator, user.username);
         defer allocator.free(escaped_username);
         const escaped_display_name = try json_utils.escapeJson(allocator, user.display_name);
         defer allocator.free(escaped_display_name);
         const escaped_avatar_url = try json_utils.escapeJson(allocator, user.avatar_url);
         defer allocator.free(escaped_avatar_url);
-        try res.body.writer().print("{{\"id\":{d},\"username\":\"{s}\",\"display_name\":\"{s}\",\"avatar_url\":\"{s}\"}}", .{ user.id, escaped_username, escaped_display_name, escaped_avatar_url });
+        try res.bodyWriter().print("{{\"id\":{d},\"username\":\"{s}\",\"display_name\":\"{s}\",\"avatar_url\":\"{s}\"}}", .{ user.id, escaped_username, escaped_display_name, escaped_avatar_url });
     }
 
-    try res.body.appendSlice("]");
+    try res.append("]");
 }
 
 pub fn getReplies(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response) !void {
@@ -462,7 +462,7 @@ pub fn getReplies(allocator: std.mem.Allocator, req: *http.Request, res: *http.R
     if (username == null) {
         res.status = 400;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Username required\"}");
+        try res.append("{\"error\":\"Username required\"}");
         return;
     }
 
@@ -503,16 +503,16 @@ pub fn getReplies(allocator: std.mem.Allocator, req: *http.Request, res: *http.R
     const rows = db.query(ReplyPost, allocator, sql, &params) catch {
         res.status = 500;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Failed to fetch replies\"}");
+        try res.append("{\"error\":\"Failed to fetch replies\"}");
         return;
     };
     defer db.freeRows(ReplyPost, allocator, rows);
 
     res.headers.put("Content-Type", "application/json") catch {};
-    try res.body.appendSlice("[");
+    try res.append("[");
 
     for (rows, 0..) |post, idx| {
-        if (idx > 0) try res.body.appendSlice(",");
+        if (idx > 0) try res.append(",");
         const escaped_content = try json_utils.escapeJson(allocator, post.content);
         defer allocator.free(escaped_content);
         const escaped_username = try json_utils.escapeJson(allocator, post.username);
@@ -521,10 +521,10 @@ pub fn getReplies(allocator: std.mem.Allocator, req: *http.Request, res: *http.R
         defer allocator.free(escaped_display_name);
         const escaped_created_at = try json_utils.escapeJson(allocator, post.created_at);
         defer allocator.free(escaped_created_at);
-        try res.body.writer().print("{{\"id\":{d},\"user_id\":{d},\"username\":\"{s}\",\"display_name\":\"{s}\",\"content\":\"{s}\",\"created_at\":\"{s}\",\"likes_count\":{d},\"comments_count\":{d},\"is_liked\":{s}}}", .{ post.id, post.user_id, escaped_username, escaped_display_name, escaped_content, escaped_created_at, post.likes_count, post.comments_count, if (post.is_liked) "true" else "false" });
+        try res.bodyWriter().print("{{\"id\":{d},\"user_id\":{d},\"username\":\"{s}\",\"display_name\":\"{s}\",\"content\":\"{s}\",\"created_at\":\"{s}\",\"likes_count\":{d},\"comments_count\":{d},\"is_liked\":{s}}}", .{ post.id, post.user_id, escaped_username, escaped_display_name, escaped_content, escaped_created_at, post.likes_count, post.comments_count, if (post.is_liked) "true" else "false" });
     }
 
-    try res.body.appendSlice("]");
+    try res.append("]");
 }
 
 pub fn getMediaPosts(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response) !void {
@@ -547,7 +547,7 @@ pub fn getMediaPosts(allocator: std.mem.Allocator, req: *http.Request, res: *htt
     if (username == null) {
         res.status = 400;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Username required\"}");
+        try res.append("{\"error\":\"Username required\"}");
         return;
     }
 
@@ -588,16 +588,16 @@ pub fn getMediaPosts(allocator: std.mem.Allocator, req: *http.Request, res: *htt
     const rows = db.query(MediaPost, allocator, sql, &params) catch {
         res.status = 500;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Failed to fetch media posts\"}");
+        try res.append("{\"error\":\"Failed to fetch media posts\"}");
         return;
     };
     defer db.freeRows(MediaPost, allocator, rows);
 
     res.headers.put("Content-Type", "application/json") catch {};
-    try res.body.appendSlice("[");
+    try res.append("[");
 
     for (rows, 0..) |post, idx| {
-        if (idx > 0) try res.body.appendSlice(",");
+        if (idx > 0) try res.append(",");
         const escaped_content = try json_utils.escapeJson(allocator, post.content);
         defer allocator.free(escaped_content);
         const escaped_username = try json_utils.escapeJson(allocator, post.username);
@@ -608,17 +608,17 @@ pub fn getMediaPosts(allocator: std.mem.Allocator, req: *http.Request, res: *htt
         defer allocator.free(escaped_created_at);
         const escaped_media_urls = try json_utils.escapeJson(allocator, post.media_urls orelse "");
         defer allocator.free(escaped_media_urls);
-        try res.body.writer().print("{{\"id\":{d},\"user_id\":{d},\"username\":\"{s}\",\"display_name\":\"{s}\",\"content\":\"{s}\",\"media_urls\":\"{s}\",\"created_at\":\"{s}\",\"likes_count\":{d},\"comments_count\":{d},\"is_liked\":{s}}}", .{ post.id, post.user_id, escaped_username, escaped_display_name, escaped_content, escaped_media_urls, escaped_created_at, post.likes_count, post.comments_count, if (post.is_liked) "true" else "false" });
+        try res.bodyWriter().print("{{\"id\":{d},\"user_id\":{d},\"username\":\"{s}\",\"display_name\":\"{s}\",\"content\":\"{s}\",\"media_urls\":\"{s}\",\"created_at\":\"{s}\",\"likes_count\":{d},\"comments_count\":{d},\"is_liked\":{s}}}", .{ post.id, post.user_id, escaped_username, escaped_display_name, escaped_content, escaped_media_urls, escaped_created_at, post.likes_count, post.comments_count, if (post.is_liked) "true" else "false" });
     }
 
-    try res.body.appendSlice("]");
+    try res.append("]");
 }
 
 pub fn updateProfile(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response) !void {
     const user_id = try auth.getUserIdFromRequest(allocator, req) orelse {
         res.status = 401;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Unauthorized\"}");
+        try res.append("{\"error\":\"Unauthorized\"}");
         return;
     };
 
@@ -638,7 +638,7 @@ pub fn updateProfile(allocator: std.mem.Allocator, req: *http.Request, res: *htt
         if (bio.len > 160) {
             res.status = 400;
             res.headers.put("Content-Type", "application/json") catch {};
-            try res.body.appendSlice("{\"error\":\"Bio must be 160 characters or less\"}");
+            try res.append("{\"error\":\"Bio must be 160 characters or less\"}");
             return;
         }
     }
@@ -648,7 +648,7 @@ pub fn updateProfile(allocator: std.mem.Allocator, req: *http.Request, res: *htt
         if (name.len > 50) {
             res.status = 400;
             res.headers.put("Content-Type", "application/json") catch {};
-            try res.body.appendSlice("{\"error\":\"Display name must be 50 characters or less\"}");
+            try res.append("{\"error\":\"Display name must be 50 characters or less\"}");
             return;
         }
     }
@@ -660,10 +660,10 @@ pub fn updateProfile(allocator: std.mem.Allocator, req: *http.Request, res: *htt
     db.execute(sql, &[_][]const u8{ body.display_name orelse "", body.bio orelse "", body.avatar_url orelse "", user_id_str }) catch {
         res.status = 500;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.body.appendSlice("{\"error\":\"Failed to update profile\"}");
+        try res.append("{\"error\":\"Failed to update profile\"}");
         return;
     };
 
     res.headers.put("Content-Type", "application/json") catch {};
-    try res.body.appendSlice("{\"updated\":true}");
+    try res.append("{\"updated\":true}");
 }

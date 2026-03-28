@@ -127,8 +127,12 @@ pub fn verifyPassword(allocator: std.mem.Allocator, password: []const u8, stored
         hasher.final(&computed_hash);
     }
 
-    // Constant-time comparison
-    return crypto.utils.timingSafeEql([HASH_LEN]u8, computed_hash, expected_hash[0..HASH_LEN].*);
+    // Constant-time comparison using XOR and OR accumulation
+    var result: u8 = 0;
+    for (computed_hash, expected_hash[0..HASH_LEN]) |a, b| {
+        result |= a ^ b;
+    }
+    return result == 0;
 }
 
 /// Verify password against legacy hash format (simple SHA256 hex)
@@ -153,6 +157,10 @@ fn verifyLegacyPassword(password: []const u8, stored_hash: []const u8) bool {
     hasher.update(password);
     hasher.final(&computed_hash);
 
-    // Constant-time comparison
-    return crypto.utils.timingSafeEql([HASH_LEN]u8, computed_hash, expected_hash);
+    // Constant-time comparison using XOR and OR accumulation
+    var result: u8 = 0;
+    for (computed_hash, expected_hash) |a, b| {
+        result |= a ^ b;
+    }
+    return result == 0;
 }
