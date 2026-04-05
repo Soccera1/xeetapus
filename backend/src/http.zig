@@ -44,7 +44,7 @@ pub const Response = struct {
 
     pub fn json(self: *Response, data: anytype) !void {
         self.headers.put("Content-Type", "application/json") catch {};
-        try std.json.stringify(data, .{}, self.body.writer(self.allocator));
+        try std.json.stringify(data, .{}, self.body.writer());
     }
 
     pub fn text(self: *Response, content: []const u8) !void {
@@ -56,7 +56,7 @@ pub const Response = struct {
         try self.body.appendSlice(self.allocator, slice);
     }
 
-    pub fn bodyWriter(self: *Response) std.array_list.Aligned(u8, null).Writer {
+    pub fn bodyWriter(self: *Response) std.ArrayListUnmanaged(u8).Writer {
         return self.body.writer(self.allocator);
     }
 
@@ -87,9 +87,7 @@ pub const Response = struct {
     }
 
     pub fn send(self: *Response, stream: net.Stream, request_origin: ?[]const u8) !void {
-        var write_buffer: [1024]u8 = undefined;
-        var stream_writer = stream.writer(&write_buffer);
-        const writer = &stream_writer.interface;
+        var writer = stream.writer();
 
         // Status line
         const status_text = switch (self.status) {

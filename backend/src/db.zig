@@ -6,7 +6,12 @@ const c = @cImport({
 var db: ?*c.sqlite3 = null;
 
 pub fn init(path: []const u8) !void {
-    const result = c.sqlite3_open(path.ptr, &db);
+    const path_z = try std.heap.page_allocator.alloc(u8, path.len + 1);
+    defer std.heap.page_allocator.free(path_z);
+    @memcpy(path_z[0..path.len], path);
+    path_z[path.len] = 0;
+
+    const result = c.sqlite3_open(@as([*:0]const u8, @ptrCast(path_z.ptr)), &db);
     if (result != c.SQLITE_OK) {
         std.log.err("Failed to open database: {s}", .{c.sqlite3_errmsg(db)});
         return error.DatabaseOpenFailed;

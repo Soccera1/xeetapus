@@ -57,3 +57,6 @@ coverage/
 
 # Deploy
 deploy/
+
+# Codex
+.codex

@@ -1,7 +1,17 @@
 const std = @import("std");
 
 pub fn build(b: *std.Build) void {
-    const target = b.standardTargetOptions(.{});
+    var target_query = b.standardTargetOptionsQueryOnly(.{});
+    if (target_query.os_tag == null) {
+        target_query.os_tag = .linux;
+    }
+    if (target_query.abi == null) {
+        target_query.abi = .gnu;
+    }
+    if (target_query.os_tag == .linux and target_query.dynamic_linker.get() == null) {
+        target_query.dynamic_linker = std.Target.DynamicLinker.init("/lib64/ld-linux-x86-64.so.2");
+    }
+    const target = b.resolveTargetQuery(target_query);
     const optimize = b.standardOptimizeOption(.{});
 
     const exe = b.addExecutable(.{

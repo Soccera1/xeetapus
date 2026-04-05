@@ -785,13 +785,10 @@ fn postJson(
     var client = std.http.Client{ .allocator = allocator };
     defer client.deinit();
 
-    var response: std.ArrayListUnmanaged(u8) = .{};
-    defer response.deinit(allocator);
+    var response = std.ArrayList(u8).init(allocator);
+    defer response.deinit();
 
     const start_time = std.time.milliTimestamp();
-
-    var body_writer = std.io.Writer.Allocating.init(allocator);
-    defer body_writer.deinit();
 
     const result = client.fetch(.{
         .location = .{ .url = url },
@@ -801,7 +798,7 @@ fn postJson(
             .content_type = .{ .override = "application/json" },
         },
         .extra_headers = extra_headers,
-        .response_writer = @ptrCast(@constCast(&response.writer(allocator))),
+        .response_storage = .{ .dynamic = &response },
     }) catch |err| {
         const elapsed = std.time.milliTimestamp() - start_time;
         std.log.warn("LLM request failed after {d}ms: {s}", .{ elapsed, @errorName(err) });
@@ -822,7 +819,7 @@ fn postJson(
 
     return .{
         .status = @intFromEnum(result.status),
-        .body = try response.toOwnedSlice(allocator),
+        .body = try response.toOwnedSlice(),
     };
 }
 
