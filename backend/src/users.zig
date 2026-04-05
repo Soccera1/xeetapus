@@ -166,9 +166,11 @@ pub fn getPosts(allocator: std.mem.Allocator, req: *http.Request, res: *http.Res
         defer allocator.free(escaped_username);
         const escaped_display_name = try json_utils.escapeJson(allocator, post.display_name);
         defer allocator.free(escaped_display_name);
+        const escaped_media_urls = try json_utils.escapeJson(allocator, post.media_urls orelse "");
+        defer allocator.free(escaped_media_urls);
         const escaped_created_at = try json_utils.escapeJson(allocator, post.created_at);
         defer allocator.free(escaped_created_at);
-        try res.bodyWriter().print("{{\"id\":{d},\"user_id\":{d},\"username\":\"{s}\",\"display_name\":\"{s}\",\"content\":\"{s}\",\"created_at\":\"{s}\",\"likes_count\":{d},\"comments_count\":{d},\"is_liked\":{s}}}", .{ post.id, post.user_id, escaped_username, escaped_display_name, escaped_content, escaped_created_at, post.likes_count, post.comments_count, if (post.is_liked) "true" else "false" });
+        try res.bodyWriter().print("{{\"id\":{d},\"user_id\":{d},\"username\":\"{s}\",\"display_name\":\"{s}\",\"content\":\"{s}\",\"media_urls\":\"{s}\",\"created_at\":\"{s}\",\"likes_count\":{d},\"comments_count\":{d},\"is_liked\":{s}}}", .{ post.id, post.user_id, escaped_username, escaped_display_name, escaped_content, escaped_media_urls, escaped_created_at, post.likes_count, post.comments_count, if (post.is_liked) "true" else "false" });
     }
 
     try res.append("]");
@@ -519,9 +521,11 @@ pub fn getReplies(allocator: std.mem.Allocator, req: *http.Request, res: *http.R
         defer allocator.free(escaped_username);
         const escaped_display_name = try json_utils.escapeJson(allocator, post.display_name);
         defer allocator.free(escaped_display_name);
+        const escaped_media_urls = try json_utils.escapeJson(allocator, post.media_urls orelse "");
+        defer allocator.free(escaped_media_urls);
         const escaped_created_at = try json_utils.escapeJson(allocator, post.created_at);
         defer allocator.free(escaped_created_at);
-        try res.bodyWriter().print("{{\"id\":{d},\"user_id\":{d},\"username\":\"{s}\",\"display_name\":\"{s}\",\"content\":\"{s}\",\"created_at\":\"{s}\",\"likes_count\":{d},\"comments_count\":{d},\"is_liked\":{s}}}", .{ post.id, post.user_id, escaped_username, escaped_display_name, escaped_content, escaped_created_at, post.likes_count, post.comments_count, if (post.is_liked) "true" else "false" });
+        try res.bodyWriter().print("{{\"id\":{d},\"user_id\":{d},\"username\":\"{s}\",\"display_name\":\"{s}\",\"content\":\"{s}\",\"media_urls\":\"{s}\",\"created_at\":\"{s}\",\"likes_count\":{d},\"comments_count\":{d},\"is_liked\":{s}}}", .{ post.id, post.user_id, escaped_username, escaped_display_name, escaped_content, escaped_media_urls, escaped_created_at, post.likes_count, post.comments_count, if (post.is_liked) "true" else "false" });
     }
 
     try res.append("]");

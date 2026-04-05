@@ -51,6 +51,8 @@ export function PostComposer({ onPostCreated, replyToId, replyToPost, quotePost 
 
     const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
         const files = Array.from(e.target.files || []);
+        e.target.value = '';
+
         if (files.length + selectedFiles.length > 4) {
             alert('You can only upload up to 4 images/videos');
             return;
@@ -282,6 +284,7 @@ export function PostComposer({ onPostCreated, replyToId, replyToPost, quotePost 
                         <div className="flex justify-between items-center">
                             <div className="flex items-center gap-2">
                                 <Button
+                                    type="button"
                                     variant="ghost"
                                     size="sm"
                                     className="text-blue-500 hover:text-blue-600"
@@ -298,6 +301,7 @@ export function PostComposer({ onPostCreated, replyToId, replyToPost, quotePost 
                                     onChange={handleFileSelect}
                                 />
                                 <Button
+                                    type="button"
                                     variant="ghost"
                                     size="sm"
                                     className={`${showPoll ? 'text-blue-500' : 'text-blue-500 hover:text-blue-600'}`}

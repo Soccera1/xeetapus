@@ -249,7 +249,7 @@ pub const Server = struct {
                 .port = port,
                 .routes = .{},
                 .rate_limiter = ratelimit.RateLimiter.init(allocator, 100, 60),
-                .max_request_size = 1024 * 1024, // 1MB default
+                .max_request_size = 10 * 1024 * 1024, // 10MB default
                 .is_production = false,
             };
         };
@@ -317,29 +317,28 @@ pub const Server = struct {
     fn handleConnection(self: *Server, connection: net.Server.Connection) void {
         defer connection.stream.close();
 
-        var buf: [8192]u8 = undefined;
-        const bytes_read = connection.stream.read(&buf) catch |err| {
+        const request_data = self.readRequestData(connection.stream) catch |err| {
+            if (err == error.RequestTooLarge) {
+                var res = Response.init(self.allocator);
+                defer res.deinit();
+                res.status = 413;
+                res.headers.put("Content-Type", "text/plain") catch {};
+                res.append("Request entity too large") catch {};
+                res.addSecurityHeaders(self.is_production);
+                res.send(connection.stream, null) catch |send_err| {
+                    std.log.debug("Failed to send 413 response: {s}", .{@errorName(send_err)});
+                };
+                return;
+            }
+
             std.log.err("Failed to read from connection: {s}", .{@errorName(err)});
             return;
         };
+        defer self.allocator.free(request_data);
 
-        if (bytes_read == 0) return;
+        if (request_data.len == 0) return;
 
-        // Check request size
-        if (bytes_read > self.max_request_size) {
-            var res = Response.init(self.allocator);
-            defer res.deinit();
-            res.status = 413; // Payload Too Large
-            res.headers.put("Content-Type", "text/plain") catch {};
-            res.append("Request entity too large") catch {};
-            res.addSecurityHeaders(self.is_production);
-            res.send(connection.stream, null) catch |err| {
-                std.log.debug("Failed to send 413 response: {s}", .{@errorName(err)});
-            };
-            return;
-        }
-
-        var req = self.parseRequest(buf[0..bytes_read], connection.address) catch |err| {
+        var req = self.parseRequest(request_data, connection.address) catch |err| {
             std.log.err("Failed to parse request: {s}", .{@errorName(err)});
             return;
         };
@@ -463,6 +462,49 @@ pub const Server = struct {
         };
     }
 
+    fn readRequestData(self: *Server, stream: net.Stream) ![]u8 {
+        var data = std.ArrayListUnmanaged(u8){};
+        errdefer data.deinit(self.allocator);
+
+        var chunk: [4096]u8 = undefined;
+        var header_end: ?usize = null;
+        var content_length: ?usize = null;
+        var expects_body = false;
+
+        while (true) {
+            const bytes_read = try stream.read(&chunk);
+            if (bytes_read == 0) break;
+
+            try data.appendSlice(self.allocator, chunk[0..bytes_read]);
+            if (data.items.len > self.max_request_size) {
+                return error.RequestTooLarge;
+            }
+
+            if (header_end == null) {
+                if (std.mem.indexOf(u8, data.items, "\r\n\r\n")) |idx| {
+                    header_end = idx;
+                    expects_body = requestExpectsBody(data.items[0..idx]);
+                    content_length = parseContentLength(data.items[0..idx]) catch null;
+
+                    if (!expects_body or content_length == 0) {
+                        break;
+                    }
+                }
+            }
+
+            if (header_end) |idx| {
+                if (content_length) |len| {
+                    const total_needed = idx + 4 + len;
+                    if (data.items.len >= total_needed) {
+                        break;
+                    }
+                }
+            }
+        }
+
+        return try data.toOwnedSlice(self.allocator);
+    }
+
     fn parseRequest(self: *Server, data: []const u8, remote_addr: net.Address) !Request {
         var lines = std.mem.splitScalar(u8, data, '\n');
 
@@ -529,3 +571,33 @@ pub const Server = struct {
         };
     }
 };
+
+fn requestExpectsBody(request_head: []const u8) bool {
+    var lines = std.mem.splitSequence(u8, request_head, "\r\n");
+    const request_line = lines.next() orelse return false;
+    var parts = std.mem.splitScalar(u8, request_line, ' ');
+    const method = parts.next() orelse return false;
+
+    return std.mem.eql(u8, method, "POST") or
+        std.mem.eql(u8, method, "PUT") or
+        std.mem.eql(u8, method, "PATCH");
+}
+
+fn parseContentLength(request_head: []const u8) !usize {
+    var lines = std.mem.splitSequence(u8, request_head, "\r\n");
+    _ = lines.next();
+
+    while (lines.next()) |line| {
+        if (line.len == 0) continue;
+
+        if (std.mem.indexOfScalar(u8, line, ':')) |colon_idx| {
+            const key = std.mem.trim(u8, line[0..colon_idx], " ");
+            const value = std.mem.trim(u8, line[colon_idx + 1 ..], " ");
+            if (std.ascii.eqlIgnoreCase(key, "Content-Length")) {
+                return std.fmt.parseInt(usize, value, 10);
+            }
+        }
+    }
+
+    return 0;
+}

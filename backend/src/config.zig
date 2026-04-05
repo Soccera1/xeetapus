@@ -86,10 +86,10 @@ pub const Config = struct {
 
         const max_size_str = std.process.getEnvVarOwned(allocator, "XEETAPUS_MAX_REQUEST_SIZE") catch null;
         const max_request_size: usize = if (max_size_str) |s| blk: {
-            const sz = std.fmt.parseInt(usize, s, 10) catch (1024 * 1024);
+            const sz = std.fmt.parseInt(usize, s, 10) catch (10 * 1024 * 1024);
             allocator.free(s);
             break :blk sz;
-        } else 1024 * 1024; // 1MB default
+        } else 10 * 1024 * 1024; // 10MB default
 
         const rate_limit_str = std.process.getEnvVarOwned(allocator, "XEETAPUS_RATE_LIMIT_REQUESTS") catch null;
         const rate_limit_requests: u32 = if (rate_limit_str) |s| blk: {

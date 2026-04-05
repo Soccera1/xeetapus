@@ -51,6 +51,8 @@ export function MessagesPage() {
 
     const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
         const files = Array.from(e.target.files || []);
+        e.target.value = '';
+
         if (files.length + selectedFiles.length > 4) {
             setError('You can only upload up to 4 images/videos');
             return;
@@ -233,6 +235,7 @@ export function MessagesPage() {
                                                     className="w-full h-20 object-cover rounded-lg"
                                                 />
                                                 <button
+                                                    type="button"
                                                     onClick={() => removeMedia(idx)}
                                                     className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600"
                                                 >
@@ -252,6 +255,7 @@ export function MessagesPage() {
                                         id="message-media-input"
                                     />
                                     <Button
+                                        type="button"
                                         variant="outline"
                                         size="icon"
                                         onClick={() => document.getElementById('message-media-input')?.click()}
@@ -266,7 +270,7 @@ export function MessagesPage() {
                                         onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
                                         disabled={isSending}
                                     />
-                                    <Button onClick={sendMessage} size="icon" disabled={isSending || (!newMessage.trim() && selectedFiles.length === 0)}>
+                                    <Button type="button" onClick={sendMessage} size="icon" disabled={isSending || (!newMessage.trim() && selectedFiles.length === 0)}>
                                         <Send className="w-4 h-4" />
                                     </Button>
                                 </div>

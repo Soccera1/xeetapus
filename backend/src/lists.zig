@@ -476,6 +476,8 @@ pub fn getListTimeline(allocator: std.mem.Allocator, req: *http.Request, res: *h
         try res.bodyWriter().print(",\"content\":\"{s}\"", .{row.content});
         if (row.media_urls) |urls| {
             try res.bodyWriter().print(",\"media_urls\":\"{s}\"", .{urls});
+        } else {
+            try res.bodyWriter().print(",\"media_urls\":\"\"", .{});
         }
         if (row.reply_to_id) |reply| {
             try res.bodyWriter().print(",\"reply_to_id\":{d}", .{reply});
