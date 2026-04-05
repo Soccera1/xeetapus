@@ -30,7 +30,8 @@ stop:
 # Build the backend (Zig)
 build-backend:
     @echo "📦 Building Zig backend..."
-    @cd backend && zig build
+    @mkdir -p /tmp/zig-cache /tmp/zig-global-cache
+    @cd backend && env ZIG_LOCAL_CACHE_DIR=/tmp/zig-cache ZIG_GLOBAL_CACHE_DIR=/tmp/zig-global-cache zig build
     @echo "✅ Backend build complete!"
 
 # Build the frontend (React)
