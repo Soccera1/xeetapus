@@ -162,6 +162,8 @@ export function ProfilePage() {
 
     const handleAvatarSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
+        e.target.value = '';
+
         if (file) {
             setAvatarFile(file);
             const reader = new FileReader();

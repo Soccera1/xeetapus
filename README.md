@@ -39,7 +39,7 @@ Xeetapus implements comprehensive security measures following OWASP guidelines:
 - **Security Headers**: CSP, HSTS, X-Frame-Options, X-Content-Type-Options, and more
 - **Input Validation**: Username, email, and password validation; XSS sanitization
 - **Path Traversal Protection**: Canonical path validation
-- **Request Limits**: Configurable request size limits (default: 1MB)
+- **Request Limits**: Configurable request size limits (default: 10MB)
 - **Audit Logging**: Security event tracking
 - **SQL Injection Prevention**: Parameterized queries throughout
 
@@ -206,8 +206,8 @@ XEETAPUS_ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173
 # Password hashing cost (default: 12, higher = more secure but slower)
 XEETAPUS_BCRYPT_COST=12
 
-# Maximum request size in bytes (default: 1MB)
-XEETAPUS_MAX_REQUEST_SIZE=1048576
+# Maximum request size in bytes (default: 10MB)
+XEETAPUS_MAX_REQUEST_SIZE=10485760
 
 # Rate limiting
 XEETAPUS_RATE_LIMIT_REQUESTS=100

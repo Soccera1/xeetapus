@@ -114,6 +114,8 @@ pub fn getPostsByHashtag(allocator: std.mem.Allocator, req: *http.Request, res: 
         try res.bodyWriter().print(",\"content\":\"{s}\"", .{row.content});
         if (row.media_urls) |urls| {
             try res.bodyWriter().print(",\"media_urls\":\"{s}\"", .{urls});
+        } else {
+            try res.bodyWriter().print(",\"media_urls\":\"\"", .{});
         }
         try res.bodyWriter().print(",\"created_at\":\"{s}\",\"likes_count\":{d},\"comments_count\":{d},\"reposts_count\":{d},\"is_liked\":{d},\"is_reposted\":{d}}}", .{
             row.created_at, row.likes_count, row.comments_count, row.reposts_count, row.is_liked, row.is_reposted,
