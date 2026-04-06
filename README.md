@@ -2,17 +2,6 @@
 
 A fully functional clone of X (Twitter) built with Zig backend and React frontend. Now production-ready with comprehensive security features.
 
-## ⚠️ Security Maintenance Notice
-
-**Password Hashing Migration Completed**: As of April 6, 2026, this system has migrated to an improved password hashing algorithm (PBKDF2-HMAC-SHA256 with 32,768 iterations).
-
-**Legacy Code Removal Deadline**: The legacy password hashing support code (for backward compatibility with old hash formats) **must be removed by April 20, 2026** (2 weeks after the migration deadline). See `backend/src/password.zig` for functions marked as "legacy" to be removed:
-
-- `verifyLegacySha256()` - Remove by April 20, 2026
-- `verifyLegacyPbkdf2()` - Remove by April 20, 2026
-- `detectHashType()` - Can be simplified after legacy removal
-- Database columns `legacy_password_hash` and `migration_notified_at` can be dropped after April 20, 2026
-
 ## Features
 
 - **User Authentication**: Secure register, login, and logout with JWT tokens
