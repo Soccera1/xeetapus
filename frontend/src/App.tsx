@@ -19,6 +19,7 @@ import { AnalyticsPage } from './pages/AnalyticsPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { HashtagPage } from './pages/HashtagPage';
 import { PostDetailPage } from './pages/PostDetailPage';
+import { DonatePage } from './pages/DonatePage';
 import './index.css';
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
@@ -192,6 +193,14 @@ function AppContent() {
                         element={
                             <PrivateRoute>
                                 <PostDetailPage />
+                            </PrivateRoute>
+                        } 
+                    />
+                    <Route 
+                        path="/donate" 
+                        element={
+                            <PrivateRoute>
+                                <DonatePage />
                             </PrivateRoute>
                         } 
                     />

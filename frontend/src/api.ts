@@ -1,4 +1,4 @@
-import type { User, Post, Profile, Comment, Notification, LoginRequest, RegisterRequest, CreatePostRequest, CommentRequest, Community, CreateCommunityRequest, Conversation, Message, UserList, ListMember, Hashtag, PollOption, Draft, ScheduledPost, UserAnalytics, BlockedUser, MutedUser, LlmProvider, LlmConfigSummary, LlmChatMessage, LlmChatResponse, LlmProviderId, LoginResponse } from './types';
+import type { User, Post, Profile, Comment, Notification, LoginRequest, RegisterRequest, CreatePostRequest, CommentRequest, Community, CreateCommunityRequest, Conversation, Message, UserList, ListMember, Hashtag, PollOption, Draft, ScheduledPost, UserAnalytics, BlockedUser, MutedUser, LlmProvider, LlmConfigSummary, LlmChatMessage, LlmChatResponse, LlmProviderId, LoginResponse, ExchangeRate, CreateInvoiceRequest, Invoice, InvoiceStatus, PaymentBalance } from './types';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
@@ -613,6 +613,29 @@ export class ApiClient {
             method: 'POST',
             body: JSON.stringify(data)
         });
+    }
+
+    async getExchangeRate(): Promise<ExchangeRate> {
+        return this.fetch('/payments/rate');
+    }
+
+    async createInvoice(data: CreateInvoiceRequest): Promise<Invoice> {
+        return this.fetch('/payments/invoices', {
+            method: 'POST',
+            body: JSON.stringify(data)
+        });
+    }
+
+    async getInvoice(id: number): Promise<InvoiceStatus> {
+        return this.fetch(`/payments/invoices/${id}`);
+    }
+
+    async getInvoices(): Promise<{ invoices: InvoiceStatus[] }> {
+        return this.fetch('/payments/invoices');
+    }
+
+    async getBalance(): Promise<PaymentBalance> {
+        return this.fetch('/payments/balance');
     }
 }
 
