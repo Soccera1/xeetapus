@@ -15,6 +15,7 @@ export function AuthPage() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
+    const [migrationNotice, setMigrationNotice] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     
     const { login, register } = useAuth();
@@ -23,11 +24,15 @@ export function AuthPage() {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setError('');
+        setMigrationNotice('');
         setIsLoading(true);
 
         try {
             if (activeTab === 'login') {
-                await login(username, password);
+                const result = await login(username, password);
+                if (result.migrated && result.message) {
+                    setMigrationNotice(result.message);
+                }
             } else {
                 await register(username, email, password);
             }
@@ -121,6 +126,15 @@ export function AuthPage() {
                                 <Alert variant="destructive" className="mt-4">
                                     <AlertCircle className="h-4 w-4" />
                                     <AlertDescription>{error}</AlertDescription>
+                                </Alert>
+                            )}
+                            
+                            {migrationNotice && (
+                                <Alert className="mt-4 border-blue-500 bg-blue-50 dark:bg-blue-950">
+                                    <AlertCircle className="h-4 w-4" />
+                                    <AlertDescription className="text-blue-800 dark:text-blue-200">
+                                        {migrationNotice}
+                                    </AlertDescription>
                                 </Alert>
                             )}
                             

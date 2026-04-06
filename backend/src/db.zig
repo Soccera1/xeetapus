@@ -373,6 +373,10 @@ pub fn runMigrations() !void {
         "ALTER TABLE posts ADD COLUMN quote_to_id INTEGER REFERENCES posts(id) ON DELETE CASCADE",
         // Add poll_id column to posts
         "ALTER TABLE posts ADD COLUMN poll_id INTEGER REFERENCES polls(id) ON DELETE SET NULL",
+        // Add password migration tracking columns for improved security
+        "ALTER TABLE users ADD COLUMN legacy_password_hash TEXT",
+        "ALTER TABLE users ADD COLUMN password_migrated_at DATETIME",
+        "ALTER TABLE users ADD COLUMN migration_notified_at DATETIME",
     };
 
     const database = try getDb();
@@ -393,6 +397,19 @@ pub fn runMigrations() !void {
             return error.MigrationFailed;
         }
     }
+
+    // Migrate existing password hashes to legacy column
+    // This sets password_migrated_at to NULL (indicating legacy passwords)
+    // and copies the current password_hash to legacy_password_hash
+    const legacy_migration_sql =
+        \\UPDATE users 
+        \\SET legacy_password_hash = password_hash,
+        \\    password_migrated_at = NULL
+        \\WHERE legacy_password_hash IS NULL 
+        \\  AND EXISTS (SELECT 1 FROM users LIMIT 1)
+        \\  AND password_hash IS NOT NULL;
+    ;
+    _ = c.sqlite3_exec(database, legacy_migration_sql.ptr, null, null, null);
 
     std.log.info("Database migrations completed", .{});
 }

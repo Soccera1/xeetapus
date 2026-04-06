@@ -9,6 +9,16 @@ const audit = @import("audit.zig");
 // Token expiration: 24 hours
 const TOKEN_EXPIRATION_SECONDS = 86400;
 
+// Password migration deadline: April 6, 2026 00:00:00 UTC
+// Users have 7 days to migrate (until April 13, 2026)
+const MIGRATION_START_TIMESTAMP: i64 = 1775040000;
+
+// After notification, users have 24 hours before forced logout
+const NOTIFICATION_WINDOW_SECONDS: i64 = 86400;
+
+// Final deadline: 7 days after migration start
+const MIGRATION_DEADLINE_TIMESTAMP: i64 = MIGRATION_START_TIMESTAMP + (7 * 86400);
+
 pub const User = struct {
     id: i64,
     username: []const u8,
@@ -17,7 +27,70 @@ pub const User = struct {
     bio: ?[]const u8,
     avatar_url: ?[]const u8,
     created_at: []const u8,
+    password_migrated_at: ?[]const u8,
+    migration_notified_at: ?[]const u8,
 };
+
+pub const MigrationStatus = struct {
+    needs_migration: bool,
+    migration_deadline: []const u8,
+    hours_remaining: i64,
+    days_until_deadline: i64,
+};
+
+fn formatTimestamp(allocator: std.mem.Allocator, timestamp: i64) ![]const u8 {
+    const epoch = std.time.epoch;
+    const epoch_days = epoch.unixToEpochDays(@intCast(timestamp));
+    const year_day = epoch.epochDayToYearDay(epoch_days);
+    const year = year_day.year;
+    const month_day = epoch.yearDayToMonthDay(year_day);
+
+    return std.fmt.allocPrint(allocator, "{d}-{d:0>2}-{d:0>2}", .{
+        year,
+        month_day.month.numeric(),
+        month_day.day_index + 1,
+    });
+}
+
+fn getMigrationStatus(allocator: std.mem.Allocator, password_migrated_at: ?[]const u8, migration_notified_at: ?[]const u8) !MigrationStatus {
+    const now = std.time.timestamp();
+
+    const needs_migration = if (password_migrated_at) |m|
+        m.len == 0
+    else
+        true;
+
+    if (!needs_migration) {
+        return MigrationStatus{
+            .needs_migration = false,
+            .migration_deadline = try allocator.dupe(u8, "completed"),
+            .hours_remaining = 0,
+            .days_until_deadline = 0,
+        };
+    }
+
+    const deadline_str = try formatTimestamp(allocator, MIGRATION_DEADLINE_TIMESTAMP);
+    const seconds_until_deadline = MIGRATION_DEADLINE_TIMESTAMP - now;
+    const days_until_deadline = @max(0, seconds_until_deadline / 86400);
+
+    var hours_remaining: i64 = undefined;
+    if (migration_notified_at) |_|
+        hours_remaining = @min(24, @max(0, seconds_until_deadline / 3600))
+    else
+        hours_remaining = @max(0, seconds_until_deadline / 3600);
+
+    // If less than 24 hours to deadline, give them 24 hours from now
+    if (hours_remaining < 24 and days_until_deadline < 1) {
+        hours_remaining = 24;
+    }
+
+    return MigrationStatus{
+        .needs_migration = true,
+        .migration_deadline = deadline_str,
+        .hours_remaining = hours_remaining,
+        .days_until_deadline = days_until_deadline,
+    };
+}
 
 pub const RegisterRequest = struct {
     username: []const u8,
@@ -119,13 +192,15 @@ pub fn login(allocator: std.mem.Allocator, req: *http.Request, res: *http.Respon
 
     const body = parsed.value;
 
-    // Query user
-    const sql = "SELECT id, username, email, password_hash FROM users WHERE username = ?";
+    const sql = "SELECT id, username, email, password_hash, legacy_password_hash, password_migrated_at, migration_notified_at FROM users WHERE username = ?";
     const UserWithPassword = struct {
         id: i64,
         username: []const u8,
         email: []const u8,
         password_hash: []const u8,
+        legacy_password_hash: ?[]const u8,
+        password_migrated_at: ?[]const u8,
+        migration_notified_at: ?[]const u8,
     };
 
     const rows = db.query(UserWithPassword, allocator, sql, &[_][]const u8{body.username}) catch {
@@ -137,7 +212,6 @@ pub fn login(allocator: std.mem.Allocator, req: *http.Request, res: *http.Respon
     defer db.freeRows(UserWithPassword, allocator, rows);
 
     if (rows.len == 0) {
-        // Log failed login attempt
         audit.logAuth(allocator, "login", null, req, false);
         res.status = 401;
         res.headers.put("Content-Type", "application/json") catch {};
@@ -147,9 +221,7 @@ pub fn login(allocator: std.mem.Allocator, req: *http.Request, res: *http.Respon
 
     const user = rows[0];
 
-    // Verify password
     if (!try security.verifyPassword(allocator, body.password, user.password_hash)) {
-        // Log failed login attempt
         audit.logAuth(allocator, "login", user.id, req, false);
         res.status = 401;
         res.headers.put("Content-Type", "application/json") catch {};
@@ -157,23 +229,73 @@ pub fn login(allocator: std.mem.Allocator, req: *http.Request, res: *http.Respon
         return;
     }
 
-    // Generate secure signed token
+    const now = std.time.timestamp();
+    var password_migrated = false;
+    var migration_message: ?[]const u8 = null;
+    defer if (migration_message) |msg| allocator.free(msg);
+
+    // Check if password needs migration
+    if (security.isLegacyPasswordHash(user.password_hash)) {
+        // Check migration deadline
+        if (now > MIGRATION_DEADLINE_TIMESTAMP) {
+            if (user.password_migrated_at == null or (user.password_migrated_at != null and user.password_migrated_at.?.len == 0)) {
+                res.status = 403;
+                res.headers.put("Content-Type", "application/json") catch {};
+                try res.append("{\"error\":\"Password migration deadline passed. Please reset your password.\",\"migration_required\":true}");
+                return;
+            }
+        }
+
+        const new_hash = try security.hashPassword(allocator, body.password);
+        defer allocator.free(new_hash);
+
+        const now_str = try std.fmt.allocPrint(allocator, "{d}", .{now});
+        defer allocator.free(now_str);
+
+        const update_sql =
+            \\UPDATE users 
+            \\SET password_hash = ?, 
+            \\    password_migrated_at = ?,
+            \\    migration_notified_at = COALESCE(migration_notified_at, ?)
+            \\WHERE id = ?
+        ;
+        const update_params = [_][]const u8{ new_hash, now_str, now_str, try std.fmt.allocPrint(allocator, "{d}", .{user.id}) };
+        defer allocator.free(update_params[3]);
+
+        db.execute(update_sql, &update_params) catch {
+            std.log.err("Failed to migrate password for user {d}", .{user.id});
+        };
+
+        password_migrated = true;
+        migration_message = try std.fmt.allocPrint(allocator, "Password hashing has been improved. You will be logged out within 24 hours to complete the security upgrade.", .{});
+        std.log.info("Migrated password for user {d} to new hashing algorithm", .{user.id});
+        // Already using modern hash
+        // Check if migration timestamp is set
+        if (user.password_migrated_at == null or (user.password_migrated_at != null and user.password_migrated_at.?.len == 0)) {
+            const now_str2 = try std.fmt.allocPrint(allocator, "{d}", .{now});
+            defer allocator.free(now_str2);
+            const update_sql2 = "UPDATE users SET password_migrated_at = ? WHERE id = ?";
+            const update_params2 = [_][]const u8{ now_str2, try std.fmt.allocPrint(allocator, "{d}", .{user.id}) };
+            defer allocator.free(update_params2[1]);
+            db.execute(update_sql2, &update_params2) catch {
+                std.log.warn("Failed to update migration timestamp for user {d}", .{user.id});
+            };
+        }
+    }
+
     const cfg = try config.Config.get();
     const token = try security.generateSignedToken(allocator, cfg.jwt_secret, user.id, TOKEN_EXPIRATION_SECONDS);
 
-    // Generate CSRF token
     const session_id = try security.generateSecureTokenAlloc(allocator);
     defer allocator.free(session_id);
     const csrf_token = try security.tokens.generateCsrfToken(allocator, cfg.csrf_secret, session_id);
 
-    // Set HTTP-only cookie with token
     const cookie_secure = if (cfg.cookie_secure) "; Secure" else "";
     const cookie_str = try std.fmt.allocPrint(allocator, "auth_token={s}; HttpOnly{s}; SameSite=Lax; Path=/; Max-Age={d}", .{
         token, cookie_secure, TOKEN_EXPIRATION_SECONDS,
     });
     res.headers.put("Set-Cookie", cookie_str) catch {};
 
-    // Log successful login
     audit.logAuth(allocator, "login", user.id, req, true);
 
     res.headers.put("Content-Type", "application/json") catch {};
@@ -182,10 +304,20 @@ pub fn login(allocator: std.mem.Allocator, req: *http.Request, res: *http.Respon
     const escaped_email2 = try json_utils.escapeJson(allocator, user.email);
     defer allocator.free(escaped_email2);
     const escaped_csrf = try json_utils.escapeJson(allocator, csrf_token);
-    try res.bodyWriter().print("{{\"id\":{d},\"username\":\"{s}\",\"email\":\"{s}\",\"token\":\"{s}\",\"csrf_token\":\"{s}\"}}", .{ user.id, escaped_username2, escaped_email2, token, escaped_csrf });
+
+    if (password_migrated) {
+        const escaped_msg = try json_utils.escapeJson(allocator, migration_message.?);
+        defer allocator.free(escaped_msg);
+        try res.bodyWriter().print("{{\"id\":{d},\"username\":\"{s}\",\"email\":\"{s}\",\"token\":\"{s}\",\"csrf_token\":\"{s}\",\"password_migrated\":true,\"migration_message\":\"{s}\"}}", .{
+            user.id, escaped_username2, escaped_email2, token, escaped_csrf, escaped_msg,
+        });
+    } else {
+        try res.bodyWriter().print("{{\"id\":{d},\"username\":\"{s}\",\"email\":\"{s}\",\"token\":\"{s}\",\"csrf_token\":\"{s}\",\"password_migrated\":false}}", .{
+            user.id, escaped_username2, escaped_email2, token, escaped_csrf,
+        });
+    }
     allocator.free(escaped_csrf);
     allocator.free(csrf_token);
-    // Note: cookie_str and token are stored in response headers and must not be freed here
 }
 
 pub fn logout(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response) !void {
@@ -210,12 +342,24 @@ pub fn me(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response)
         return;
     };
 
-    const sql = "SELECT id, username, email, display_name, bio, avatar_url, created_at FROM users WHERE id = ?";
-    const rows = db.query(User, allocator, sql, &[_][]const u8{try std.fmt.allocPrint(allocator, "{d}", .{user_id})}) catch {
+    const sql = "SELECT id, username, email, display_name, bio, avatar_url, created_at, password_migrated_at, migration_notified_at FROM users WHERE id = ?";
+    const UserWithMigration = struct {
+        id: i64,
+        username: []const u8,
+        email: []const u8,
+        display_name: ?[]const u8,
+        bio: ?[]const u8,
+        avatar_url: ?[]const u8,
+        created_at: []const u8,
+        password_migrated_at: ?[]const u8,
+        migration_notified_at: ?[]const u8,
+    };
+
+    const rows = db.query(UserWithMigration, allocator, sql, &[_][]const u8{try std.fmt.allocPrint(allocator, "{d}", .{user_id})}) catch {
         res.status = 500;
         return;
     };
-    defer db.freeRows(User, allocator, rows);
+    defer db.freeRows(UserWithMigration, allocator, rows);
 
     if (rows.len == 0) {
         res.status = 404;
@@ -225,6 +369,20 @@ pub fn me(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response)
     }
 
     const user = rows[0];
+
+    // Check if user needs to be forced logged out due to migration deadline
+    const now = std.time.timestamp();
+    const needs_migration = user.password_migrated_at == null or (user.password_migrated_at != null and user.password_migrated_at.?.len == 0);
+
+    if (needs_migration and now > MIGRATION_DEADLINE_TIMESTAMP) {
+        // Force logout - past migration deadline
+        res.status = 403;
+        res.headers.put("Content-Type", "application/json") catch {};
+        res.headers.put("Set-Cookie", "auth_token=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0") catch {};
+        try res.append("{\"error\":\"Password migration required. Please log in to update your security settings.\",\"migration_required\":true}");
+        return;
+    }
+
     res.headers.put("Content-Type", "application/json") catch {};
     const escaped_username3 = try json_utils.escapeJson(allocator, user.username);
     defer allocator.free(escaped_username3);
@@ -238,7 +396,11 @@ pub fn me(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response)
     defer allocator.free(escaped_avatar_url);
     const escaped_created_at = try json_utils.escapeJson(allocator, user.created_at);
     defer allocator.free(escaped_created_at);
-    try res.bodyWriter().print("{{\"id\":{d},\"username\":\"{s}\",\"email\":\"{s}\",\"display_name\":\"{s}\",\"bio\":\"{s}\",\"avatar_url\":\"{s}\",\"created_at\":\"{s}\"}}", .{ user.id, escaped_username3, escaped_email3, escaped_display_name, escaped_bio, escaped_avatar_url, escaped_created_at });
+
+    const migration_status = if (needs_migration) "pending" else "completed";
+    try res.bodyWriter().print("{{\"id\":{d},\"username\":\"{s}\",\"email\":\"{s}\",\"display_name\":\"{s}\",\"bio\":\"{s}\",\"avatar_url\":\"{s}\",\"created_at\":\"{s}\",\"password_migration_status\":\"{s}\"}}", .{
+        user.id, escaped_username3, escaped_email3, escaped_display_name, escaped_bio, escaped_avatar_url, escaped_created_at, migration_status,
+    });
 }
 
 pub fn getUserIdFromRequest(allocator: std.mem.Allocator, req: *http.Request) !?i64 {
