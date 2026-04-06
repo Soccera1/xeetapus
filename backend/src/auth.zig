@@ -133,8 +133,11 @@ pub fn register(allocator: std.mem.Allocator, req: *http.Request, res: *http.Res
         return;
     }
 
+    // Get config for PBKDF2 iterations
+    const cfg = try config.Config.get();
+
     // Hash password using secure PBKDF2
-    const password_hash = try security.hashPassword(allocator, body.password);
+    const password_hash = try security.hashPassword(allocator, body.password, cfg.pbkdf2_iterations);
     defer allocator.free(password_hash);
 
     // Insert user
@@ -154,7 +157,6 @@ pub fn register(allocator: std.mem.Allocator, req: *http.Request, res: *http.Res
     const user_id = db.lastInsertRowId();
 
     // Generate secure signed token
-    const cfg = try config.Config.get();
     const token = try security.generateSignedToken(allocator, cfg.jwt_secret, user_id, TOKEN_EXPIRATION_SECONDS);
 
     // Generate CSRF token
@@ -246,7 +248,8 @@ pub fn login(allocator: std.mem.Allocator, req: *http.Request, res: *http.Respon
             }
         }
 
-        const new_hash = try security.hashPassword(allocator, body.password);
+        const cfg = try config.Config.get();
+        const new_hash = try security.hashPassword(allocator, body.password, cfg.pbkdf2_iterations);
         defer allocator.free(new_hash);
 
         const now_str = try std.fmt.allocPrint(allocator, "{d}", .{now});

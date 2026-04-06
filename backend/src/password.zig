@@ -101,11 +101,11 @@ fn hmacSha256(key: []const u8, message: []const u8, out: *[HASH_LEN]u8) void {
 
 /// Modern password hashing using PBKDF2-HMAC-SHA256
 /// Returns a string in format: $pbkdf2-sha256$v2$iterations$base64(salt)$base64(hash)
-pub fn hashPassword(allocator: std.mem.Allocator, password: []const u8) ![]u8 {
+pub fn hashPassword(allocator: std.mem.Allocator, password: []const u8, iterations: u32) ![]u8 {
     const salt = generateSalt();
     var hash: [HASH_LEN]u8 = undefined;
 
-    pbkdf2HmacSha256(password, &salt, NEW_ITERATIONS, &hash);
+    pbkdf2HmacSha256(password, &salt, iterations, &hash);
 
     const salt_b64_len = std.base64.standard.Encoder.calcSize(salt.len);
     const hash_b64_len = std.base64.standard.Encoder.calcSize(hash.len);
@@ -118,7 +118,7 @@ pub fn hashPassword(allocator: std.mem.Allocator, password: []const u8) ![]u8 {
     const writer = stream.writer();
 
     try writer.writeAll("$pbkdf2-sha256$v2$");
-    try writer.print("{d}$", .{NEW_ITERATIONS});
+    try writer.print("{d}$", .{iterations});
 
     var salt_b64_buf: [64]u8 = undefined;
     const salt_b64 = std.base64.standard.Encoder.encode(&salt_b64_buf, &salt);
