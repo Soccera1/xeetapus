@@ -7,6 +7,12 @@ export interface User {
     avatar_url?: string | null;
     created_at: string;
     token?: string;
+    password_migration_status?: 'pending' | 'completed';
+}
+
+export interface LoginResponse extends User {
+    password_migrated?: boolean;
+    migration_message?: string;
 }
 
 export interface Post {

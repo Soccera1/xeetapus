@@ -1,4 +1,4 @@
-import type { User, Post, Profile, Comment, Notification, LoginRequest, RegisterRequest, CreatePostRequest, CommentRequest, Community, CreateCommunityRequest, Conversation, Message, UserList, ListMember, Hashtag, PollOption, Draft, ScheduledPost, UserAnalytics, BlockedUser, MutedUser, LlmProvider, LlmConfigSummary, LlmChatMessage, LlmChatResponse, LlmProviderId } from './types';
+import type { User, Post, Profile, Comment, Notification, LoginRequest, RegisterRequest, CreatePostRequest, CommentRequest, Community, CreateCommunityRequest, Conversation, Message, UserList, ListMember, Hashtag, PollOption, Draft, ScheduledPost, UserAnalytics, BlockedUser, MutedUser, LlmProvider, LlmConfigSummary, LlmChatMessage, LlmChatResponse, LlmProviderId, LoginResponse } from './types';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
@@ -66,10 +66,26 @@ export class ApiClient {
 
         if (!response.ok) {
             if (response.status === 401) {
-                // Clear auth state on 401
                 this.clearToken();
-                // Optionally redirect to login
                 window.dispatchEvent(new CustomEvent('auth:unauthorized'));
+            }
+
+            if (response.status === 403) {
+                const errorText = await response.text();
+                try {
+                    const errorJson = JSON.parse(errorText) as { error?: string; migration_required?: boolean };
+                    if (errorJson.migration_required) {
+                        this.clearToken();
+                        window.dispatchEvent(new CustomEvent('auth:migration-required', { 
+                            detail: { message: errorJson.error || 'Password migration required. Please reset your password.' }
+                        }));
+                        const error: any = new Error(errorJson.error || 'Password migration required');
+                        error.migrationRequired = true;
+                        throw error;
+                    }
+                } catch (parseError) {
+                    // Not a JSON response, continue with normal error handling
+                }
             }
             
             if (response.status === 429) {
@@ -116,7 +132,7 @@ export class ApiClient {
         return response;
     }
 
-    async login(data: LoginRequest): Promise<User> {
+    async login(data: LoginRequest): Promise<LoginResponse> {
         const response = await this.fetch('/auth/login', {
             method: 'POST',
             body: JSON.stringify(data)

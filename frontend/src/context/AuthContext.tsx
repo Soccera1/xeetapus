@@ -5,7 +5,7 @@ import type { User } from '../types';
 interface AuthContextType {
     user: User | null;
     isAuthenticated: boolean;
-    login: (username: string, password: string) => Promise<void>;
+    login: (username: string, password: string) => Promise<{ migrated?: boolean; message?: string }>;
     register: (username: string, email: string, password: string) => Promise<void>;
     logout: () => void;
     isLoading: boolean;
@@ -30,9 +30,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
     }, []);
 
-    const login = async (username: string, password: string) => {
+    const login = async (username: string, password: string): Promise<{ migrated?: boolean; message?: string }> => {
         const userData = await api.login({ username, password });
         setUser(userData);
+        if (userData.password_migrated && userData.migration_message) {
+            return { migrated: true, message: userData.migration_message };
+        }
+        return {};
     };
 
     const register = async (username: string, email: string, password: string) => {
