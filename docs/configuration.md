@@ -35,6 +35,7 @@ These must be set for the application to function properly.
 | `XEETAPUS_MEDIA_PATH` | `/var/www/xeetapus/media` | Media upload directory |
 | `XEETAPUS_ALLOWED_ORIGINS` | `http://localhost:3000` | CORS origins (comma-separated) |
 | `XEETAPUS_BCRYPT_COST` | `12` | _Deprecated/unused - Password hashing uses PBKDF2 |
+| `XEETAPUS_PBKDF2_ITERATIONS` | `32768` | PBKDF2-HMAC-SHA256 iterations for password hashing |
 | `XEETAPUS_MAX_REQUEST_SIZE` | `10485760` | Max request size in bytes (default: 10MB) |
 | `XEETAPUS_RATE_LIMIT_REQUESTS` | `100` | Max requests per window |
 | `XEETAPUS_RATE_LIMIT_WINDOW` | `60` | Rate limit window in seconds |
@@ -108,9 +109,15 @@ XEETAPUS_MEDIA_PATH=/var/www/xeetapus/media
 XEETAPUS_ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173
 
 # Password hashing cost (deprecated - not used)
-# The implementation now uses PBKDF2-HMAC-SHA256 with fixed 32,768 iterations
-# This setting is kept for backward compatibility
+# The implementation now uses PBKDF2-HMAC-SHA256
+# Use XEETAPUS_PBKDF2_ITERATIONS instead
 # XEETAPUS_BCRYPT_COST=12
+
+# PBKDF2 iterations for password hashing
+# Higher values are more secure but slower
+# Default: 32768 (minimum recommended: 10000)
+# Production recommendation: 60000-100000
+# XEETAPUS_PBKDF2_ITERATIONS=32768
 
 # Maximum request size in bytes
 # Default: 10485760 (10 MB)
@@ -154,6 +161,7 @@ pub const Config = struct {
     server_port: u16,
     allowed_origins: []const []const u8,
     bcrypt_cost: u6,
+    pbkdf2_iterations: u32,
     max_request_size: usize,
     rate_limit_requests: u32,
     rate_limit_window_seconds: i64,
@@ -452,7 +460,8 @@ XEETAPUS_ENV=development
 XEETAPUS_PORT=8080
 XEETAPUS_DB_PATH=xeetapus.db
 XEETAPUS_ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173
-# Note: XEETAPUS_BCRYPT_COST is deprecated/not used - hashing uses PBKDF2 with fixed iterations
+# Password hashing: PBKDF2 iterations (default: 32768)
+# XEETAPUS_PBKDF2_ITERATIONS=32768
 ```
 
 ### Staging
