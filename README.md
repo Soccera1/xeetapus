@@ -432,7 +432,14 @@ CMD ["./xeetapus-backend"]
 
 ### Payments (Monero)
 - `POST /api/payments/invoices` - Create a Monero payment request
-  - Body: `{"amount": 10.00, "currency": "USD", "priority": "normal"}`
+  - Option 1 - Fixed XMR amount (no exchange rate needed):
+    ```json
+    {"xmr_amount": 0.5, "priority": "normal"}
+    ```
+  - Option 2 - Fiat amount (requires exchange rate):
+    ```json
+    {"amount": 10.00, "currency": "USD", "priority": "normal"}
+    ```
   - Priority options: `slow` (~90min), `normal` (~30min), `fast` (~10min), `fastest` (~5min)
   - Network fee is automatically added based on current Monero network conditions
 - `GET /api/payments/invoices/:id` - Check payment status

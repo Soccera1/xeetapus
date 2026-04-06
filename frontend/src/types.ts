@@ -276,3 +276,59 @@ export interface LlmChatResponse {
     model: string;
     reply: string;
 }
+
+export type FeePriority = 'slow' | 'normal' | 'fast' | 'fastest';
+
+export interface FeeEstimate {
+    fee_per_byte: number;
+    estimated_tx_fee_xmr: number;
+    estimated_tx_fee_usd: number | null;
+    estimated_minutes: number;
+}
+
+export interface ExchangeRate {
+    xmr_usd: number | null;
+    last_updated: number;
+    cache_ttl_seconds: number;
+    fees: {
+        slow: FeeEstimate;
+        normal: FeeEstimate;
+        fast: FeeEstimate;
+        fastest: FeeEstimate;
+    };
+}
+
+export interface CreateInvoiceRequest {
+    amount?: number;
+    currency?: string;
+    xmr_amount?: number;
+    priority?: FeePriority;
+    memo?: string;
+}
+
+export interface Invoice {
+    id: number;
+    address: string;
+    xmr_amount: number;
+    network_fee: number;
+    total_xmr: number;
+    fiat_amount?: number;
+    fiat_currency?: string;
+    network_fee_usd?: number;
+    xmr_price_usd?: number;
+    priority: string;
+    estimated_minutes: number;
+    status: 'pending' | 'paid' | 'expired';
+}
+
+export interface InvoiceStatus {
+    id: number;
+    amount: number;
+    status: string;
+    created_at: string;
+    paid_at?: string;
+}
+
+export interface PaymentBalance {
+    balance: number;
+}

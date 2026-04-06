@@ -168,7 +168,8 @@ fn fetchFeeEstimates(allocator: std.mem.Allocator) ![4]u64 {
     var client = std.http.Client{ .allocator = allocator };
     defer client.deinit();
 
-    const uri = try std.Uri.parse(daemon_url);
+    var uri = try std.Uri.parse(daemon_url);
+    uri.path = std.Uri.Component{ .raw = "/json_rpc" };
 
     var headers_buf: [1024]u8 = undefined;
     var req = try client.open(.POST, uri, .{
@@ -181,6 +182,7 @@ fn fetchFeeEstimates(allocator: std.mem.Allocator) ![4]u64 {
 
     req.transfer_encoding = .{ .content_length = request_body.len };
     try req.send();
+    try req.writer().writeAll(request_body);
     try req.finish();
 
     try req.wait();
@@ -255,17 +257,13 @@ pub fn xmrToFiat(allocator: std.mem.Allocator, xmr_amount: f64, fiat_currency: [
 }
 
 pub fn getExchangeRate(allocator: std.mem.Allocator, _: *http.Request, res: *http.Response) !void {
-    const price = getXmrPrice(allocator) catch {
-        res.status = 503;
-        res.headers.put("Content-Type", "application/json") catch {};
-        try res.append("{\"error\":\"Failed to fetch exchange rate\"}");
-        return;
-    };
+    const price_result = getXmrPrice(allocator);
+    const price: f64 = price_result catch 0;
 
     const fees = getXmrFees(allocator) catch {
         res.status = 503;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.append("{\"error\":\"Failed to fetch fee estimates\"}");
+        try res.append("{\"error\":\"Failed to fetch fee estimates from monerod\"}");
         return;
     };
 
@@ -278,7 +276,11 @@ pub fn getExchangeRate(allocator: std.mem.Allocator, _: *http.Request, res: *htt
 
     try response.append('{');
 
-    try response.writer().print("\"xmr_usd\":{d:.2},\"last_updated\":{d},\"cache_ttl_seconds\":{d},\"fees\":{{", .{ price, last_updated, CACHE_TTL_SECONDS });
+    if (price > 0) {
+        try response.writer().print("\"xmr_usd\":{d:.2},\"last_updated\":{d},\"cache_ttl_seconds\":{d},\"fees\":{{", .{ price, last_updated, CACHE_TTL_SECONDS });
+    } else {
+        try response.writer().print("\"xmr_usd\":null,\"last_updated\":0,\"cache_ttl_seconds\":{d},\"fees\":{{", .{CACHE_TTL_SECONDS});
+    }
 
     const priority_names = [_][]const u8{ "slow", "normal", "fast", "fastest" };
     const priority_minutes = [_]u32{ 90, 30, 10, 5 };
@@ -287,8 +289,12 @@ pub fn getExchangeRate(allocator: std.mem.Allocator, _: *http.Request, res: *htt
         if (i > 0) try response.append(',');
         const fee_atomic = estimateTxFee(@as(FeePriority, @enumFromInt(i + 1)), fees);
         const fee_xmr = @as(f64, @floatFromInt(fee_atomic)) / 1_000_000_000_000.0;
-        const fee_usd = fee_xmr * price;
-        try response.writer().print("\"{s}\":{{\"fee_per_byte\":{d},\"estimated_tx_fee_xmr\":{d:.12},\"estimated_tx_fee_usd\":{d:.4},\"estimated_minutes\":{d}}}", .{ priority_names[i], fees[i], fee_xmr, fee_usd, priority_minutes[i] });
+        if (price > 0) {
+            const fee_usd = fee_xmr * price;
+            try response.writer().print("\"{s}\":{{\"fee_per_byte\":{d},\"estimated_tx_fee_xmr\":{d:.12},\"estimated_tx_fee_usd\":{d:.4},\"estimated_minutes\":{d}}}", .{ priority_names[i], fees[i], fee_xmr, fee_usd, priority_minutes[i] });
+        } else {
+            try response.writer().print("\"{s}\":{{\"fee_per_byte\":{d},\"estimated_tx_fee_xmr\":{d:.12},\"estimated_tx_fee_usd\":null,\"estimated_minutes\":{d}}}", .{ priority_names[i], fees[i], fee_xmr, priority_minutes[i] });
+        }
     }
 
     try response.append('}');
@@ -323,39 +329,12 @@ pub fn createInvoice(allocator: std.mem.Allocator, req: *http.Request, res: *htt
     };
     defer parsed.deinit();
 
-    const amount_opt = parsed.value.object.get("amount");
-    if (amount_opt == null) {
-        res.status = 400;
-        res.headers.put("Content-Type", "application/json") catch {};
-        try res.append("{\"error\":\"Amount required\"}");
-        return;
-    }
-
-    const amount = amount_opt.?;
-    const fiat_amount: f64 = switch (amount) {
-        .integer => |i| @floatFromInt(i),
-        .float => |f| f,
-        else => {
-            res.status = 400;
-            res.headers.put("Content-Type", "application/json") catch {};
-            try res.append("{\"error\":\"Invalid amount\"}");
-            return;
-        },
-    };
-
-    const currency = if (parsed.value.object.get("currency")) |c| switch (c) {
-        .string => |s| s,
-        else => "USD",
-    } else "USD";
-
     const priority_str = if (parsed.value.object.get("priority")) |p| switch (p) {
         .string => |s| s,
         else => "normal",
     } else "normal";
 
     const priority = FeePriority.fromString(priority_str) orelse .normal;
-
-    _ = parsed.value.object.get("memo");
 
     if (monero_config == null or monero_config.?.wallet_address.len == 0) {
         res.status = 503;
@@ -374,17 +353,71 @@ pub fn createInvoice(allocator: std.mem.Allocator, req: *http.Request, res: *htt
     const network_fee_atomic = estimateTxFee(priority, fees);
     const network_fee_xmr = @as(f64, @floatFromInt(network_fee_atomic)) / 1_000_000_000_000.0;
 
-    const xmr_amount = fiatToXmr(allocator, fiat_amount, currency) catch {
-        res.status = 503;
+    var xmr_amount: f64 = undefined;
+    var fiat_amount: f64 = 0;
+    var currency: []const u8 = "XMR";
+    var price_usd: f64 = 0;
+    var using_fixed_xmr = false;
+
+    if (parsed.value.object.get("xmr_amount")) |xmr_val| {
+        using_fixed_xmr = true;
+        xmr_amount = switch (xmr_val) {
+            .integer => |i| @floatFromInt(i),
+            .float => |f| f,
+            else => {
+                res.status = 400;
+                res.headers.put("Content-Type", "application/json") catch {};
+                try res.append("{\"error\":\"Invalid xmr_amount\"}");
+                return;
+            },
+        };
+        if (xmr_amount <= 0) {
+            res.status = 400;
+            res.headers.put("Content-Type", "application/json") catch {};
+            try res.append("{\"error\":\"xmr_amount must be positive\"}");
+            return;
+        }
+    } else if (parsed.value.object.get("amount")) |amount_val| {
+        const fiat_amt: f64 = switch (amount_val) {
+            .integer => |i| @floatFromInt(i),
+            .float => |f| f,
+            else => {
+                res.status = 400;
+                res.headers.put("Content-Type", "application/json") catch {};
+                try res.append("{\"error\":\"Invalid amount\"}");
+                return;
+            },
+        };
+        if (fiat_amt <= 0) {
+            res.status = 400;
+            res.headers.put("Content-Type", "application/json") catch {};
+            try res.append("{\"error\":\"amount must be positive\"}");
+            return;
+        }
+
+        currency = if (parsed.value.object.get("currency")) |c| switch (c) {
+            .string => |s| s,
+            else => "USD",
+        } else "USD";
+
+        xmr_amount = fiatToXmr(allocator, fiat_amt, currency) catch {
+            res.status = 503;
+            res.headers.put("Content-Type", "application/json") catch {};
+            try res.append("{\"error\":\"Failed to get XMR exchange rate. Use xmr_amount to specify XMR directly.\"}");
+            return;
+        };
+
+        fiat_amount = fiat_amt;
+        price_usd = getXmrPrice(allocator) catch 0;
+    } else {
+        res.status = 400;
         res.headers.put("Content-Type", "application/json") catch {};
-        try res.append("{\"error\":\"Failed to get XMR exchange rate\"}");
+        try res.append("{\"error\":\"Either amount or xmr_amount required\"}");
         return;
-    };
+    }
 
     const total_xmr = xmr_amount + network_fee_xmr;
     const xmr_atomic = @as(i64, @intFromFloat(total_xmr * 1_000_000_000_000));
-
-    const price_usd = getXmrPrice(allocator) catch 0;
     const network_fee_usd = network_fee_xmr * price_usd;
 
     const user_id_str = try std.fmt.allocPrint(allocator, "{d}", .{user_id});
@@ -393,8 +426,8 @@ pub fn createInvoice(allocator: std.mem.Allocator, req: *http.Request, res: *htt
     const amount_str = try std.fmt.allocPrint(allocator, "{d}", .{xmr_atomic});
     defer allocator.free(amount_str);
 
-    const insert_sql = "INSERT INTO invoices (user_id, amount, status) VALUES (?, ?, 'pending')";
-    db.execute(insert_sql, &[_][]const u8{ user_id_str, amount_str }) catch {
+    const insert_sql = "INSERT INTO invoices (user_id, amount, invoice, status) VALUES (?, ?, ?, 'pending')";
+    db.execute(insert_sql, &[_][]const u8{ user_id_str, amount_str, monero_config.?.wallet_address }) catch {
         res.status = 500;
         res.headers.put("Content-Type", "application/json") catch {};
         try res.append("{\"error\":\"Database error\"}");
@@ -402,22 +435,17 @@ pub fn createInvoice(allocator: std.mem.Allocator, req: *http.Request, res: *htt
     };
 
     const invoice_id = db.lastInsertRowId();
-
     const invoice_id_str = try std.fmt.allocPrint(allocator, "{d}", .{invoice_id});
     defer allocator.free(invoice_id_str);
-
-    const update_sql = "UPDATE invoices SET invoice = ? WHERE id = ?";
-    db.execute(update_sql, &[_][]const u8{ monero_config.?.wallet_address, invoice_id_str }) catch {
-        res.status = 500;
-        res.headers.put("Content-Type", "application/json") catch {};
-        try res.append("{\"error\":\"Failed to update invoice\"}");
-        return;
-    };
 
     var response = std.ArrayList(u8).init(allocator);
     defer response.deinit();
 
-    try response.writer().print("{{\"id\":{},\"address\":\"{s}\",\"xmr_amount\":{d:.12},\"network_fee\":{d:.12},\"total_xmr\":{d:.12},\"fiat_amount\":{d:.2},\"fiat_currency\":\"{s}\",\"network_fee_usd\":{d:.4},\"xmr_price_usd\":{d:.2},\"priority\":\"{s}\",\"estimated_minutes\":{d},\"status\":\"pending\"}}", .{ invoice_id, monero_config.?.wallet_address, xmr_amount, network_fee_xmr, total_xmr, fiat_amount, currency, network_fee_usd, price_usd, priority.toString(), priority.estimatedMinutes() });
+    if (using_fixed_xmr) {
+        try response.writer().print("{{\"id\":{},\"address\":\"{s}\",\"xmr_amount\":{d:.12},\"network_fee\":{d:.12},\"total_xmr\":{d:.12},\"priority\":\"{s}\",\"estimated_minutes\":{d},\"status\":\"pending\"}}", .{ invoice_id, monero_config.?.wallet_address, xmr_amount, network_fee_xmr, total_xmr, priority.toString(), priority.estimatedMinutes() });
+    } else {
+        try response.writer().print("{{\"id\":{},\"address\":\"{s}\",\"xmr_amount\":{d:.12},\"network_fee\":{d:.12},\"total_xmr\":{d:.12},\"fiat_amount\":{d:.2},\"fiat_currency\":\"{s}\",\"network_fee_usd\":{d:.4},\"xmr_price_usd\":{d:.2},\"priority\":\"{s}\",\"estimated_minutes\":{d},\"status\":\"pending\"}}", .{ invoice_id, monero_config.?.wallet_address, xmr_amount, network_fee_xmr, total_xmr, fiat_amount, currency, network_fee_usd, price_usd, priority.toString(), priority.estimatedMinutes() });
+    }
 
     res.status = 201;
     res.headers.put("Content-Type", "application/json") catch {};
