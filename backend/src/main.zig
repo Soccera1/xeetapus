@@ -20,6 +20,7 @@ const media = @import("media.zig");
 const config = @import("config.zig");
 const audit = @import("audit.zig");
 const llm = @import("llm.zig");
+const payments = @import("payments.zig");
 
 const PUBLIC_DIR = "./dist";
 
@@ -45,6 +46,10 @@ pub fn main() !void {
     const audit_log_path = if (config.isProduction()) "/var/log/xeetapus.log" else "audit.log";
     try audit.init(audit_log_path);
     defer audit.deinit();
+
+    // Initialize payments (Monero)
+    try payments.init(allocator);
+    defer payments.deinit();
 
     // Start HTTP server
     var server = try http.Server.init(allocator, cfg.server_port);
@@ -161,6 +166,14 @@ pub fn main() !void {
     // Media routes
     try server.addRoute("POST", "/api/media/upload", media.upload);
     try server.addPublicRoute("GET", "/media/*", media.serveMedia);
+
+    // Payment routes (Monero)
+    try server.addRoute("POST", "/api/payments/invoices", payments.createInvoice);
+    try server.addRoute("GET", "/api/payments/invoices/:id", payments.checkPayment);
+    try server.addRoute("GET", "/api/payments/invoices", payments.getInvoices);
+    try server.addRoute("GET", "/api/payments/balance", payments.getBalance);
+    try server.addRoute("POST", "/api/payments/pay", payments.payInvoice);
+    try server.addRoute("GET", "/api/payments/rate", payments.getExchangeRate);
 
     try server.addPublicRoute("GET", "/api/health", healthCheck);
 

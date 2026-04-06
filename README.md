@@ -26,6 +26,7 @@ A fully functional clone of X (Twitter) built with Zig backend and React fronten
 - **Scheduled Posts**: Schedule posts for later
 - **Analytics**: View post engagement statistics
 - **Pinned Posts**: Pin important posts to your profile
+- **Monero Payments**: Accept Monero (XMR) payments
 
 ## Security Features
 
@@ -212,6 +213,13 @@ XEETAPUS_MAX_REQUEST_SIZE=10485760
 # Rate limiting
 XEETAPUS_RATE_LIMIT_REQUESTS=100
 XEETAPUS_RATE_LIMIT_WINDOW=60
+
+# Monero Configuration
+# Required for payment functionality
+XEETAPUS_MONERO_ADDRESS=your-monero-wallet-address
+
+# Monero daemon RPC URL (for fee estimates, defaults to http://localhost:18081)
+XEETAPUS_MONEROD_URL=http://localhost:18081
 ```
 
 ### Frontend Configuration
@@ -422,6 +430,17 @@ CMD ["./xeetapus-backend"]
 - `GET /api/analytics/posts/:id/views` - Get post view count
 - `GET /api/analytics/me` - Get user analytics
 
+### Payments (Monero)
+- `POST /api/payments/invoices` - Create a Monero payment request
+  - Body: `{"amount": 10.00, "currency": "USD", "priority": "normal"}`
+  - Priority options: `slow` (~90min), `normal` (~30min), `fast` (~10min), `fastest` (~5min)
+  - Network fee is automatically added based on current Monero network conditions
+- `GET /api/payments/invoices/:id` - Check payment status
+- `GET /api/payments/invoices` - List user's invoices
+- `GET /api/payments/balance` - Get user's balance
+- `POST /api/payments/pay` - Pay a Monero invoice
+- `GET /api/payments/rate` - Get current XMR/USD exchange rate and network fee estimates (cached for 2hours)
+
 ### Health
 - `GET /api/health` - Health check endpoint
 
@@ -457,6 +476,8 @@ The application uses SQLite with the following tables:
 - **drafts** - Unpublished drafts
 - **scheduled_posts** - Posts scheduled for future
 - **pinned_posts** - User's pinned posts
+- **invoices** - Monero payment invoices
+- **payments** - Monero payment records
 
 ## Development
 
