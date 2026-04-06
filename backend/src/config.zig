@@ -15,7 +15,6 @@ pub const Config = struct {
     cookie_http_only: bool,
     cookie_same_site: []const u8,
     csrf_secret: []const u8,
-    pbkdf2_iterations: u32,
 
     var instance: ?Config = null;
 
@@ -78,13 +77,6 @@ pub const Config = struct {
         };
         errdefer allocator.free(csrf_secret);
 
-        const pbkdf2_iterations_str = std.process.getEnvVarOwned(allocator, "XEETAPUS_PBKDF2_ITERATIONS") catch null;
-        const pbkdf2_iterations: u32 = if (pbkdf2_iterations_str) |s| blk: {
-            const iter = std.fmt.parseInt(u32, s, 10) catch 32768;
-            allocator.free(s);
-            break :blk iter;
-        } else 32768;
-
         const bcrypt_cost_str = std.process.getEnvVarOwned(allocator, "XEETAPUS_BCRYPT_COST") catch null;
         const bcrypt_cost: u6 = if (bcrypt_cost_str) |s| blk: {
             const c = std.fmt.parseInt(u6, s, 10) catch 12;
@@ -131,7 +123,6 @@ pub const Config = struct {
             .cookie_http_only = cookie_http_only,
             .cookie_same_site = "Lax",
             .csrf_secret = csrf_secret,
-            .pbkdf2_iterations = pbkdf2_iterations,
         };
     }
 

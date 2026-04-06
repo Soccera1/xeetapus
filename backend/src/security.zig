@@ -9,6 +9,7 @@ pub const validation = @import("validation.zig");
 pub const hashPassword = password.hashPassword;
 pub const verifyPassword = password.verifyPassword;
 pub const isLegacyPasswordHash = password.isLegacyHash;
+pub const isCriticalLegacyHash = password.isCriticalLegacyHash;
 pub const generateSecureToken = tokens.generateSecureToken;
 pub const generateSecureTokenAlloc = tokens.generateSecureTokenAlloc;
 pub const generateSignedToken = tokens.generateSignedToken;
