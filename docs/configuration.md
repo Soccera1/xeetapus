@@ -34,7 +34,7 @@ These must be set for the application to function properly.
 | `XEETAPUS_DB_PATH` | `xeetapus.db` | Database file path |
 | `XEETAPUS_MEDIA_PATH` | `/var/www/xeetapus/media` | Media upload directory |
 | `XEETAPUS_ALLOWED_ORIGINS` | `http://localhost:3000` | CORS origins (comma-separated) |
-| `XEETAPUS_BCRYPT_COST` | `12` | Password hashing cost (10-14) |
+| `XEETAPUS_BCRYPT_COST` | `12` | _Deprecated/unused - Password hashing uses PBKDF2 |
 | `XEETAPUS_MAX_REQUEST_SIZE` | `10485760` | Max request size in bytes (default: 10MB) |
 | `XEETAPUS_RATE_LIMIT_REQUESTS` | `100` | Max requests per window |
 | `XEETAPUS_RATE_LIMIT_WINDOW` | `60` | Rate limit window in seconds |
@@ -107,11 +107,10 @@ XEETAPUS_MEDIA_PATH=/var/www/xeetapus/media
 # Production example: https://example.com,https://www.example.com
 XEETAPUS_ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173
 
-# Password hashing cost (bcrypt-style iterations)
-# Higher = more secure but slower
-# Range: 10-14 recommended
-# Default: 12
-XEETAPUS_BCRYPT_COST=12
+# Password hashing cost (deprecated - not used)
+# The implementation now uses PBKDF2-HMAC-SHA256 with fixed 32,768 iterations
+# This setting is kept for backward compatibility
+# XEETAPUS_BCRYPT_COST=12
 
 # Maximum request size in bytes
 # Default: 10485760 (10 MB)
@@ -453,8 +452,8 @@ XEETAPUS_ENV=development
 XEETAPUS_PORT=8080
 XEETAPUS_DB_PATH=xeetapus.db
 XEETAPUS_ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173
-XEETAPUS_BCRYPT_COST=10  # Faster for development
-```bash
+# Note: XEETAPUS_BCRYPT_COST is deprecated/not used - hashing uses PBKDF2 with fixed iterations
+```
 
 ### Staging
 
@@ -463,7 +462,6 @@ XEETAPUS_ENV=staging
 XEETAPUS_PORT=8080
 XEETAPUS_DB_PATH=/var/www/xeetapus/xeetapus.db
 XEETAPUS_ALLOWED_ORIGINS=https://staging.example.com
-XEETAPUS_BCRYPT_COST=12
 ```
 
 ### Production
@@ -474,7 +472,6 @@ XEETAPUS_PORT=8080
 XEETAPUS_DB_PATH=/var/www/xeetapus/xeetapus.db
 XEETAPUS_MEDIA_PATH=/var/www/xeetapus/media
 XEETAPUS_ALLOWED_ORIGINS=https://example.com,https://www.example.com
-XEETAPUS_BCRYPT_COST=12
 XEETAPUS_RATE_LIMIT_REQUESTS=100
 XEETAPUS_RATE_LIMIT_WINDOW=60
 XEETAPUS_MAX_REQUEST_SIZE=10485760

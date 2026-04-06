@@ -131,6 +131,8 @@ Xeetapus uses **PBKDF2-HMAC-SHA256** for password hashing with:
 ```
 $pbkdf2-sha256$v2$32768$<base64(salt)>$<base64(hash)>
 ```
+$pbkdf2-sha256$v2$32768$<base64(salt)>$<base64(hash)>
+```
 
 ### Password Requirements
 
