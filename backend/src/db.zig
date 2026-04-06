@@ -365,6 +365,30 @@ pub fn runMigrations() !void {
         \\    UNIQUE(user_id, provider)
         \\);
         ,
+        // Monero invoices table
+        \\CREATE TABLE IF NOT EXISTS invoices (
+        \\    id INTEGER PRIMARY KEY AUTOINCREMENT,
+        \\    user_id INTEGER NOT NULL,
+        \\    amount INTEGER NOT NULL,
+        \\    invoice TEXT NOT NULL,
+        \\    status TEXT NOT NULL DEFAULT 'pending',
+        \\    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        \\    paid_at DATETIME,
+        \\    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        \\);
+        ,
+        // Monero payments table
+        \\CREATE TABLE IF NOT EXISTS payments (
+        \\    id INTEGER PRIMARY KEY AUTOINCREMENT,
+        \\    user_id INTEGER NOT NULL,
+        \\    amount INTEGER NOT NULL,
+        \\    invoice TEXT NOT NULL,
+        \\    status TEXT NOT NULL DEFAULT 'pending',
+        \\    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        \\    completed_at DATETIME,
+        \\    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        \\);
+        ,
     };
 
     // Schema migrations (ALTER TABLE statements)
