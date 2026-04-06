@@ -1,6 +1,7 @@
 const std = @import("std");
 const crypto = std.crypto;
 const argon2 = crypto.pwhash.argon2;
+const config = @import("config.zig");
 
 pub const PasswordHashError = error{
     InvalidHashFormat,
@@ -19,10 +20,12 @@ pub const HashType = enum {
 const LEGACY_HASH_LEN = 32;
 
 pub fn hashPassword(allocator: std.mem.Allocator, password: []const u8) ![]u8 {
+    const cfg = try config.Config.get();
+
     const params = argon2.Params{
-        .t = 3,
-        .m = 65536,
-        .p = 4,
+        .t = cfg.argon2_time_cost,
+        .m = cfg.argon2_memory_cost,
+        .p = cfg.argon2_parallelism,
     };
 
     var hash_buf: [256]u8 = undefined;
