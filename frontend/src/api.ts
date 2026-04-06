@@ -229,13 +229,13 @@ export class ApiClient {
         return this.fetch('/timeline/explore');
     }
 
-    async repostPost(id: number): Promise<{ reposted: boolean }> {
+    async repostPost(id: number): Promise<{ reposted: boolean; is_reposted: boolean; reposts_count: number }> {
         return this.fetch(`/posts/${id}/repost`, {
             method: 'POST'
         });
     }
 
-    async unrepostPost(id: number): Promise<{ unreposted: boolean }> {
+    async unrepostPost(id: number): Promise<{ unreposted: boolean; is_reposted: boolean; reposts_count: number }> {
         return this.fetch(`/posts/${id}/repost`, {
             method: 'DELETE'
         });

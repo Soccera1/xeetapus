@@ -17,6 +17,7 @@ interface PostCardProps {
 
 export function PostCard({ post, onUpdate, onDelete }: PostCardProps) {
     const [localPost, setLocalPost] = useState(post);
+    const [isReposting, setIsReposting] = useState(false);
     const { user } = useAuth();
     const navigate = useNavigate();
 
@@ -54,21 +55,39 @@ export function PostCard({ post, onUpdate, onDelete }: PostCardProps) {
         }
     };
 
+    const normalizeCount = (value: number | undefined | null): number => {
+        const count = Number(value);
+        return Number.isFinite(count) ? count : 0;
+    };
+
     const handleRepost = async () => {
+        if (isReposting) return;
+
         try {
+            setIsReposting(true);
             if (localPost.is_reposted) {
-                await api.unrepostPost(localPost.id);
-                const updated = { ...localPost, is_reposted: false, reposts_count: localPost.reposts_count - 1 };
+                const result = await api.unrepostPost(localPost.id);
+                const updated = {
+                    ...localPost,
+                    is_reposted: result.is_reposted,
+                    reposts_count: normalizeCount(result.reposts_count),
+                };
                 setLocalPost(updated);
                 onUpdate?.(updated);
             } else {
-                await api.repostPost(localPost.id);
-                const updated = { ...localPost, is_reposted: true, reposts_count: localPost.reposts_count + 1 };
+                const result = await api.repostPost(localPost.id);
+                const updated = {
+                    ...localPost,
+                    is_reposted: result.is_reposted,
+                    reposts_count: normalizeCount(result.reposts_count),
+                };
                 setLocalPost(updated);
                 onUpdate?.(updated);
             }
         } catch (error) {
             alert(error instanceof Error ? error.message : 'Failed to repost');
+        } finally {
+            setIsReposting(false);
         }
     };
 
@@ -357,6 +376,7 @@ export function PostCard({ post, onUpdate, onDelete }: PostCardProps) {
                                     variant="ghost"
                                     size="sm"
                                     className={`gap-2 ${localPost.is_reposted ? 'text-green-500 hover:text-green-600' : ''}`}
+                                    disabled={isReposting}
                                     onClick={handleRepost}
                                 >
                                     <Repeat2 className={`h-4 w-4 ${localPost.is_reposted ? 'fill-current' : ''}`} />

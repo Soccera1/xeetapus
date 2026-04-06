@@ -118,7 +118,9 @@ pub fn getPosts(allocator: std.mem.Allocator, req: *http.Request, res: *http.Res
         \\       p.content, p.media_urls, p.reply_to_id, p.created_at,
         \\       (SELECT COUNT(*) FROM likes WHERE post_id = p.id) as likes_count,
         \\       (SELECT COUNT(*) FROM comments WHERE post_id = p.id) as comments_count,
-        \\       CASE WHEN ? THEN (SELECT COUNT(*) FROM likes WHERE post_id = p.id AND user_id = ?) > 0 ELSE 0 END as is_liked
+        \\       (SELECT COUNT(*) FROM reposts WHERE post_id = p.id) as reposts_count,
+        \\       CASE WHEN ? THEN (SELECT COUNT(*) FROM likes WHERE post_id = p.id AND user_id = ?) > 0 ELSE 0 END as is_liked,
+        \\       CASE WHEN ? THEN (SELECT COUNT(*) FROM reposts WHERE post_id = p.id AND user_id = ?) > 0 ELSE 0 END as is_reposted
         \\FROM posts p
         \\JOIN users u ON p.user_id = u.id
         \\WHERE u.username = ?
@@ -138,14 +140,16 @@ pub fn getPosts(allocator: std.mem.Allocator, req: *http.Request, res: *http.Res
         created_at: []const u8,
         likes_count: i64,
         comments_count: i64,
+        reposts_count: i64,
         is_liked: bool,
+        is_reposted: bool,
     };
 
     const current_user_str = if (current_user_id) |id| try std.fmt.allocPrint(allocator, "{d}", .{id}) else "";
     defer if (current_user_id != null) allocator.free(current_user_str);
     const has_user = if (current_user_id != null) "1" else "0";
 
-    const params = [_][]const u8{ has_user, current_user_str, username.? };
+    const params = [_][]const u8{ has_user, current_user_str, has_user, current_user_str, username.? };
 
     const rows = db.query(Post, allocator, sql, &params) catch {
         res.status = 500;
@@ -170,7 +174,7 @@ pub fn getPosts(allocator: std.mem.Allocator, req: *http.Request, res: *http.Res
         defer allocator.free(escaped_media_urls);
         const escaped_created_at = try json_utils.escapeJson(allocator, post.created_at);
         defer allocator.free(escaped_created_at);
-        try res.bodyWriter().print("{{\"id\":{d},\"user_id\":{d},\"username\":\"{s}\",\"display_name\":\"{s}\",\"content\":\"{s}\",\"media_urls\":\"{s}\",\"created_at\":\"{s}\",\"likes_count\":{d},\"comments_count\":{d},\"is_liked\":{s}}}", .{ post.id, post.user_id, escaped_username, escaped_display_name, escaped_content, escaped_media_urls, escaped_created_at, post.likes_count, post.comments_count, if (post.is_liked) "true" else "false" });
+        try res.bodyWriter().print("{{\"id\":{d},\"user_id\":{d},\"username\":\"{s}\",\"display_name\":\"{s}\",\"content\":\"{s}\",\"media_urls\":\"{s}\",\"created_at\":\"{s}\",\"likes_count\":{d},\"comments_count\":{d},\"reposts_count\":{d},\"is_liked\":{s},\"is_reposted\":{s}}}", .{ post.id, post.user_id, escaped_username, escaped_display_name, escaped_content, escaped_media_urls, escaped_created_at, post.likes_count, post.comments_count, post.reposts_count, if (post.is_liked) "true" else "false", if (post.is_reposted) "true" else "false" });
     }
 
     try res.append("]");
@@ -473,7 +477,9 @@ pub fn getReplies(allocator: std.mem.Allocator, req: *http.Request, res: *http.R
         \\       p.content, p.media_urls, p.reply_to_id, p.created_at,
         \\       (SELECT COUNT(*) FROM likes WHERE post_id = p.id) as likes_count,
         \\       (SELECT COUNT(*) FROM comments WHERE post_id = p.id) as comments_count,
-        \\       CASE WHEN ? THEN (SELECT COUNT(*) FROM likes WHERE post_id = p.id AND user_id = ?) > 0 ELSE 0 END as is_liked
+        \\       (SELECT COUNT(*) FROM reposts WHERE post_id = p.id) as reposts_count,
+        \\       CASE WHEN ? THEN (SELECT COUNT(*) FROM likes WHERE post_id = p.id AND user_id = ?) > 0 ELSE 0 END as is_liked,
+        \\       CASE WHEN ? THEN (SELECT COUNT(*) FROM reposts WHERE post_id = p.id AND user_id = ?) > 0 ELSE 0 END as is_reposted
         \\FROM posts p
         \\JOIN users u ON p.user_id = u.id
         \\WHERE u.username = ? AND p.reply_to_id IS NOT NULL
@@ -493,14 +499,16 @@ pub fn getReplies(allocator: std.mem.Allocator, req: *http.Request, res: *http.R
         created_at: []const u8,
         likes_count: i64,
         comments_count: i64,
+        reposts_count: i64,
         is_liked: bool,
+        is_reposted: bool,
     };
 
     const current_user_str = if (current_user_id) |id| try std.fmt.allocPrint(allocator, "{d}", .{id}) else "";
     defer if (current_user_id != null) allocator.free(current_user_str);
     const has_user = if (current_user_id != null) "1" else "0";
 
-    const params = [_][]const u8{ has_user, current_user_str, username.? };
+    const params = [_][]const u8{ has_user, current_user_str, has_user, current_user_str, username.? };
 
     const rows = db.query(ReplyPost, allocator, sql, &params) catch {
         res.status = 500;
@@ -525,7 +533,7 @@ pub fn getReplies(allocator: std.mem.Allocator, req: *http.Request, res: *http.R
         defer allocator.free(escaped_media_urls);
         const escaped_created_at = try json_utils.escapeJson(allocator, post.created_at);
         defer allocator.free(escaped_created_at);
-        try res.bodyWriter().print("{{\"id\":{d},\"user_id\":{d},\"username\":\"{s}\",\"display_name\":\"{s}\",\"content\":\"{s}\",\"media_urls\":\"{s}\",\"created_at\":\"{s}\",\"likes_count\":{d},\"comments_count\":{d},\"is_liked\":{s}}}", .{ post.id, post.user_id, escaped_username, escaped_display_name, escaped_content, escaped_media_urls, escaped_created_at, post.likes_count, post.comments_count, if (post.is_liked) "true" else "false" });
+        try res.bodyWriter().print("{{\"id\":{d},\"user_id\":{d},\"username\":\"{s}\",\"display_name\":\"{s}\",\"content\":\"{s}\",\"media_urls\":\"{s}\",\"created_at\":\"{s}\",\"likes_count\":{d},\"comments_count\":{d},\"reposts_count\":{d},\"is_liked\":{s},\"is_reposted\":{s}}}", .{ post.id, post.user_id, escaped_username, escaped_display_name, escaped_content, escaped_media_urls, escaped_created_at, post.likes_count, post.comments_count, post.reposts_count, if (post.is_liked) "true" else "false", if (post.is_reposted) "true" else "false" });
     }
 
     try res.append("]");
@@ -560,7 +568,9 @@ pub fn getMediaPosts(allocator: std.mem.Allocator, req: *http.Request, res: *htt
         \\       p.content, p.media_urls, p.reply_to_id, p.created_at,
         \\       (SELECT COUNT(*) FROM likes WHERE post_id = p.id) as likes_count,
         \\       (SELECT COUNT(*) FROM comments WHERE post_id = p.id) as comments_count,
-        \\       CASE WHEN ? THEN (SELECT COUNT(*) FROM likes WHERE post_id = p.id AND user_id = ?) > 0 ELSE 0 END as is_liked
+        \\       (SELECT COUNT(*) FROM reposts WHERE post_id = p.id) as reposts_count,
+        \\       CASE WHEN ? THEN (SELECT COUNT(*) FROM likes WHERE post_id = p.id AND user_id = ?) > 0 ELSE 0 END as is_liked,
+        \\       CASE WHEN ? THEN (SELECT COUNT(*) FROM reposts WHERE post_id = p.id AND user_id = ?) > 0 ELSE 0 END as is_reposted
         \\FROM posts p
         \\JOIN users u ON p.user_id = u.id
         \\WHERE u.username = ? AND p.media_urls IS NOT NULL AND p.media_urls != ''
@@ -580,14 +590,16 @@ pub fn getMediaPosts(allocator: std.mem.Allocator, req: *http.Request, res: *htt
         created_at: []const u8,
         likes_count: i64,
         comments_count: i64,
+        reposts_count: i64,
         is_liked: bool,
+        is_reposted: bool,
     };
 
     const current_user_str = if (current_user_id) |id| try std.fmt.allocPrint(allocator, "{d}", .{id}) else "";
     defer if (current_user_id != null) allocator.free(current_user_str);
     const has_user = if (current_user_id != null) "1" else "0";
 
-    const params = [_][]const u8{ has_user, current_user_str, username.? };
+    const params = [_][]const u8{ has_user, current_user_str, has_user, current_user_str, username.? };
 
     const rows = db.query(MediaPost, allocator, sql, &params) catch {
         res.status = 500;
@@ -612,7 +624,7 @@ pub fn getMediaPosts(allocator: std.mem.Allocator, req: *http.Request, res: *htt
         defer allocator.free(escaped_created_at);
         const escaped_media_urls = try json_utils.escapeJson(allocator, post.media_urls orelse "");
         defer allocator.free(escaped_media_urls);
-        try res.bodyWriter().print("{{\"id\":{d},\"user_id\":{d},\"username\":\"{s}\",\"display_name\":\"{s}\",\"content\":\"{s}\",\"media_urls\":\"{s}\",\"created_at\":\"{s}\",\"likes_count\":{d},\"comments_count\":{d},\"is_liked\":{s}}}", .{ post.id, post.user_id, escaped_username, escaped_display_name, escaped_content, escaped_media_urls, escaped_created_at, post.likes_count, post.comments_count, if (post.is_liked) "true" else "false" });
+        try res.bodyWriter().print("{{\"id\":{d},\"user_id\":{d},\"username\":\"{s}\",\"display_name\":\"{s}\",\"content\":\"{s}\",\"media_urls\":\"{s}\",\"created_at\":\"{s}\",\"likes_count\":{d},\"comments_count\":{d},\"reposts_count\":{d},\"is_liked\":{s},\"is_reposted\":{s}}}", .{ post.id, post.user_id, escaped_username, escaped_display_name, escaped_content, escaped_media_urls, escaped_created_at, post.likes_count, post.comments_count, post.reposts_count, if (post.is_liked) "true" else "false", if (post.is_reposted) "true" else "false" });
     }
 
     try res.append("]");
