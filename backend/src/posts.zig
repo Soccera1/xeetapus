@@ -8,6 +8,10 @@ const hashtags = @import("hashtags.zig");
 const analytics = @import("analytics.zig");
 
 const UserIdRow = struct { user_id: i64 };
+const RepostStateRow = struct {
+    reposts_count: i64,
+    is_reposted: i64,
+};
 
 pub const Post = struct {
     id: i64,
@@ -618,34 +622,69 @@ pub fn repost(allocator: std.mem.Allocator, req: *http.Request, res: *http.Respo
         return;
     }
 
-    const sql = "INSERT OR IGNORE INTO reposts (user_id, post_id) VALUES (?, ?)";
+    const check_sql = "SELECT 1 as reposted FROM reposts WHERE user_id = ? AND post_id = ? LIMIT 1";
+    const insert_sql = "INSERT INTO reposts (user_id, post_id) VALUES (?, ?)";
+    const state_sql =
+        \\SELECT
+        \\    (SELECT COUNT(*) FROM reposts WHERE post_id = ?) as reposts_count,
+        \\    EXISTS(SELECT 1 FROM reposts WHERE post_id = ? AND user_id = ?) as is_reposted
+    ;
     const user_id_str = try std.fmt.allocPrint(allocator, "{d}", .{user_id});
     defer allocator.free(user_id_str);
     const post_id_str = try std.fmt.allocPrint(allocator, "{d}", .{post_id.?});
     defer allocator.free(post_id_str);
 
-    db.execute(sql, &[_][]const u8{ user_id_str, post_id_str }) catch {
+    const check_rows = db.query(UserIdRow, allocator, check_sql, &[_][]const u8{ user_id_str, post_id_str }) catch null;
+    var should_notify = false;
+    if (check_rows) |rows| {
+        defer db.freeRows(UserIdRow, allocator, rows);
+        should_notify = rows.len == 0;
+    }
+
+    if (should_notify) {
+        db.execute(insert_sql, &[_][]const u8{ user_id_str, post_id_str }) catch {
+            res.status = 500;
+            res.headers.put("Content-Type", "application/json") catch {};
+            try res.append("{\"error\":\"Failed to repost\"}");
+            return;
+        };
+    }
+
+    if (should_notify) {
+        // Create notification only when a new repost was actually inserted.
+        const post_owner_sql = "SELECT user_id FROM posts WHERE id = ?";
+        const PostOwner = struct {
+            user_id: i64,
+        };
+        const owner_rows = db.query(PostOwner, allocator, post_owner_sql, &[_][]const u8{post_id_str}) catch null;
+        if (owner_rows) |rows| {
+            defer db.freeRows(PostOwner, allocator, rows);
+            if (rows.len > 0 and rows[0].user_id != user_id) {
+                try notifications.create(rows[0].user_id, user_id, "repost", post_id.?);
+            }
+        }
+    }
+
+    const state_rows = db.query(RepostStateRow, allocator, state_sql, &[_][]const u8{ post_id_str, post_id_str, user_id_str }) catch null;
+    var reposts_count: i64 = 0;
+    var is_reposted = true;
+    if (state_rows) |rows| {
+        defer db.freeRows(RepostStateRow, allocator, rows);
+        if (rows.len > 0) {
+            reposts_count = rows[0].reposts_count;
+            is_reposted = rows[0].is_reposted != 0;
+        }
+    }
+
+    if (!is_reposted) {
         res.status = 500;
         res.headers.put("Content-Type", "application/json") catch {};
         try res.append("{\"error\":\"Failed to repost\"}");
         return;
-    };
-
-    // Create notification for post owner
-    const post_owner_sql = "SELECT user_id FROM posts WHERE id = ?";
-    const PostOwner = struct {
-        user_id: i64,
-    };
-    const owner_rows = db.query(PostOwner, allocator, post_owner_sql, &[_][]const u8{post_id_str}) catch null;
-    if (owner_rows) |rows| {
-        defer db.freeRows(PostOwner, allocator, rows);
-        if (rows.len > 0 and rows[0].user_id != user_id) {
-            try notifications.create(rows[0].user_id, user_id, "repost", post_id.?);
-        }
     }
 
     res.headers.put("Content-Type", "application/json") catch {};
-    try res.append("{\"reposted\":true}");
+    try res.bodyWriter().print("{{\"reposted\":true,\"is_reposted\":true,\"reposts_count\":{d}}}", .{reposts_count});
 }
 
 pub fn unrepost(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response) !void {
@@ -677,21 +716,44 @@ pub fn unrepost(allocator: std.mem.Allocator, req: *http.Request, res: *http.Res
         return;
     }
 
-    const sql = "DELETE FROM reposts WHERE user_id = ? AND post_id = ?";
+    const delete_sql = "DELETE FROM reposts WHERE user_id = ? AND post_id = ?";
+    const state_sql =
+        \\SELECT
+        \\    (SELECT COUNT(*) FROM reposts WHERE post_id = ?) as reposts_count,
+        \\    EXISTS(SELECT 1 FROM reposts WHERE post_id = ? AND user_id = ?) as is_reposted
+    ;
     const user_id_str = try std.fmt.allocPrint(allocator, "{d}", .{user_id});
     defer allocator.free(user_id_str);
     const post_id_str = try std.fmt.allocPrint(allocator, "{d}", .{post_id.?});
     defer allocator.free(post_id_str);
 
-    db.execute(sql, &[_][]const u8{ user_id_str, post_id_str }) catch {
+    db.execute(delete_sql, &[_][]const u8{ user_id_str, post_id_str }) catch {
         res.status = 500;
         res.headers.put("Content-Type", "application/json") catch {};
         try res.append("{\"error\":\"Failed to unrepost\"}");
         return;
     };
 
+    const state_rows = db.query(RepostStateRow, allocator, state_sql, &[_][]const u8{ post_id_str, post_id_str, user_id_str }) catch null;
+    var reposts_count: i64 = 0;
+    var is_reposted = false;
+    if (state_rows) |rows| {
+        defer db.freeRows(RepostStateRow, allocator, rows);
+        if (rows.len > 0) {
+            reposts_count = rows[0].reposts_count;
+            is_reposted = rows[0].is_reposted != 0;
+        }
+    }
+
+    if (is_reposted) {
+        res.status = 500;
+        res.headers.put("Content-Type", "application/json") catch {};
+        try res.append("{\"error\":\"Failed to unrepost\"}");
+        return;
+    }
+
     res.headers.put("Content-Type", "application/json") catch {};
-    try res.append("{\"unreposted\":true}");
+    try res.bodyWriter().print("{{\"unreposted\":true,\"is_reposted\":false,\"reposts_count\":{d}}}", .{reposts_count});
 }
 
 pub fn bookmark(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response) !void {

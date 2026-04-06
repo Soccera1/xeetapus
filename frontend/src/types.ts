@@ -4,7 +4,7 @@ export interface User {
     email: string;
     display_name?: string;
     bio?: string;
-    avatar_url?: string;
+    avatar_url?: string | null;
     created_at: string;
     token?: string;
 }
@@ -14,7 +14,7 @@ export interface Post {
     user_id: number;
     username: string;
     display_name: string;
-    avatar_url: string;
+    avatar_url: string | null;
     content: string;
     media_urls?: string;
     reply_to_id?: number;

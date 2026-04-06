@@ -47,7 +47,7 @@ export function SearchPage() {
     };
 
     const handlePostUpdate = (updatedPost: Post) => {
-        setPosts(posts.map(p => p.id === updatedPost.id ? updatedPost : p));
+        setPosts(prev => prev.map(p => p.id === updatedPost.id ? updatedPost : p));
     };
 
     return (
