@@ -15,6 +15,9 @@ pub const Config = struct {
     cookie_http_only: bool,
     cookie_same_site: []const u8,
     csrf_secret: []const u8,
+    argon2_time_cost: u32,
+    argon2_memory_cost: u32,
+    argon2_parallelism: u24,
 
     var instance: ?Config = null;
 
@@ -84,6 +87,27 @@ pub const Config = struct {
             break :blk c;
         } else 12;
 
+        const argon2_time_str = std.process.getEnvVarOwned(allocator, "XEETAPUS_ARGON2_TIME_COST") catch null;
+        const argon2_time_cost: u32 = if (argon2_time_str) |s| blk: {
+            const t = std.fmt.parseInt(u32, s, 10) catch 3;
+            allocator.free(s);
+            break :blk t;
+        } else 3;
+
+        const argon2_memory_str = std.process.getEnvVarOwned(allocator, "XEETAPUS_ARGON2_MEMORY_COST") catch null;
+        const argon2_memory_cost: u32 = if (argon2_memory_str) |s| blk: {
+            const m = std.fmt.parseInt(u32, s, 10) catch 65536;
+            allocator.free(s);
+            break :blk m;
+        } else 65536;
+
+        const argon2_parallelism_str = std.process.getEnvVarOwned(allocator, "XEETAPUS_ARGON2_PARALLELISM") catch null;
+        const argon2_parallelism: u24 = if (argon2_parallelism_str) |s| blk: {
+            const p = std.fmt.parseInt(u24, s, 10) catch 4;
+            allocator.free(s);
+            break :blk p;
+        } else 4;
+
         const max_size_str = std.process.getEnvVarOwned(allocator, "XEETAPUS_MAX_REQUEST_SIZE") catch null;
         const max_request_size: usize = if (max_size_str) |s| blk: {
             const sz = std.fmt.parseInt(usize, s, 10) catch (10 * 1024 * 1024);
@@ -123,6 +147,9 @@ pub const Config = struct {
             .cookie_http_only = cookie_http_only,
             .cookie_same_site = "Lax",
             .csrf_secret = csrf_secret,
+            .argon2_time_cost = argon2_time_cost,
+            .argon2_memory_cost = argon2_memory_cost,
+            .argon2_parallelism = argon2_parallelism,
         };
     }
 
