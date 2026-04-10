@@ -2,6 +2,7 @@ const std = @import("std");
 const http = @import("http.zig");
 const db = @import("db.zig");
 const auth = @import("auth.zig");
+const json_utils = @import("json.zig");
 
 const HashtagIdRow = struct { id: i64 };
 
@@ -32,8 +33,10 @@ pub fn getTrending(allocator: std.mem.Allocator, _: *http.Request, res: *http.Re
     try res.bodyWriter().print("{{\"trending\":[", .{});
     for (rows, 0..) |row, i| {
         if (i > 0) try res.bodyWriter().print(",", .{});
+        const escaped_tag = try json_utils.escapeJson(allocator, row.tag);
+        defer allocator.free(escaped_tag);
         try res.bodyWriter().print("{{\"id\":{d},\"tag\":\"{s}\",\"use_count\":{d}}}", .{
-            row.id, row.tag, row.use_count,
+            row.id, escaped_tag, row.use_count,
         });
     }
     try res.bodyWriter().print("]}}", .{});
@@ -98,27 +101,42 @@ pub fn getPostsByHashtag(allocator: std.mem.Allocator, req: *http.Request, res: 
     };
     defer db.freeRows(Post, allocator, rows);
 
+    const escaped_hashtag = try json_utils.escapeJson(allocator, hashtag);
+    defer allocator.free(escaped_hashtag);
+
     res.headers.put("Content-Type", "application/json") catch {};
-    try res.bodyWriter().print("{{\"hashtag\":\"{s}\",\"posts\":[", .{hashtag});
+    try res.bodyWriter().print("{{\"hashtag\":\"{s}\",\"posts\":[", .{escaped_hashtag});
     for (rows, 0..) |row, i| {
         if (i > 0) try res.bodyWriter().print(",", .{});
+        const escaped_username2 = try json_utils.escapeJson(allocator, row.username);
+        defer allocator.free(escaped_username2);
         try res.bodyWriter().print("{{\"id\":{d},\"user_id\":{d},\"username\":\"{s}\"", .{
-            row.id, row.user_id, row.username,
+            row.id, row.user_id, escaped_username2,
         });
         if (row.display_name) |name| {
-            try res.bodyWriter().print(",\"display_name\":\"{s}\"", .{name});
+            const escaped_name = try json_utils.escapeJson(allocator, name);
+            defer allocator.free(escaped_name);
+            try res.bodyWriter().print(",\"display_name\":\"{s}\"", .{escaped_name});
         }
         if (row.avatar_url) |url| {
-            try res.bodyWriter().print(",\"avatar_url\":\"{s}\"", .{url});
+            const escaped_url = try json_utils.escapeJson(allocator, url);
+            defer allocator.free(escaped_url);
+            try res.bodyWriter().print(",\"avatar_url\":\"{s}\"", .{escaped_url});
         }
-        try res.bodyWriter().print(",\"content\":\"{s}\"", .{row.content});
+        const escaped_content = try json_utils.escapeJson(allocator, row.content);
+        defer allocator.free(escaped_content);
+        try res.bodyWriter().print(",\"content\":\"{s}\"", .{escaped_content});
         if (row.media_urls) |urls| {
-            try res.bodyWriter().print(",\"media_urls\":\"{s}\"", .{urls});
+            const escaped_urls = try json_utils.escapeJson(allocator, urls);
+            defer allocator.free(escaped_urls);
+            try res.bodyWriter().print(",\"media_urls\":\"{s}\"", .{escaped_urls});
         } else {
             try res.bodyWriter().print(",\"media_urls\":\"\"", .{});
         }
+        const escaped_created = try json_utils.escapeJson(allocator, row.created_at);
+        defer allocator.free(escaped_created);
         try res.bodyWriter().print(",\"created_at\":\"{s}\",\"likes_count\":{d},\"comments_count\":{d},\"reposts_count\":{d},\"is_liked\":{d},\"is_reposted\":{d}}}", .{
-            row.created_at, row.likes_count, row.comments_count, row.reposts_count, row.is_liked, row.is_reposted,
+            escaped_created, row.likes_count, row.comments_count, row.reposts_count, row.is_liked, row.is_reposted,
         });
     }
     try res.bodyWriter().print("]}}", .{});

@@ -140,7 +140,7 @@ XEETAPUS_RATE_LIMIT_WINDOW=60
 # ------------------------------------------------------------------------------
 
 # Monero wallet address for receiving payments
-# Example: 4B6V4rjoiYSY85ZwbtLDGNAhxLdZTrmjFPRaLEXLAD2YjR6ewxJ4enQC481RrcRLQx8AhKkMgVaSCSpUEYyJPZV5FWmZ3g5
+# Example: YOUR_MONERO_WALLET_ADDRESS_HERE
 # XEETAPUS_MONERO_ADDRESS=
 
 # Monero daemon RPC URL

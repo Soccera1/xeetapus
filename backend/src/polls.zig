@@ -2,6 +2,7 @@ const std = @import("std");
 const http = @import("http.zig");
 const db = @import("db.zig");
 const auth = @import("auth.zig");
+const json_utils = @import("json.zig");
 
 const EndsAtRow = struct { ends_at: ?[]const u8 };
 const VotedRow = struct { _dummy: i64 };
@@ -208,8 +209,10 @@ pub fn getPollResults(allocator: std.mem.Allocator, req: *http.Request, res: *ht
     for (rows, 0..) |row, i| {
         if (i > 0) try res.bodyWriter().print(",", .{});
         const percentage = if (row.total_votes > 0) @as(f64, @floatFromInt(row.vote_count)) / @as(f64, @floatFromInt(row.total_votes)) * 100.0 else 0.0;
+        const escaped_option_text = try json_utils.escapeJson(allocator, row.option_text);
+        defer allocator.free(escaped_option_text);
         try res.bodyWriter().print("{{\"id\":{d},\"option_text\":\"{s}\",\"position\":{d},\"vote_count\":{d},\"percentage\":{d:.1}}}", .{
-            row.id, row.option_text, row.position, row.vote_count, percentage,
+            row.id, escaped_option_text, row.position, row.vote_count, percentage,
         });
     }
     const total = if (rows.len > 0) rows[0].total_votes else 0;

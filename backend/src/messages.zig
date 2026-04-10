@@ -2,6 +2,7 @@ const std = @import("std");
 const http = @import("http.zig");
 const db = @import("db.zig");
 const auth = @import("auth.zig");
+const json_utils = @import("json.zig");
 
 const DummyRow = struct { _dummy: i64 };
 const CountRow = struct { count: i64 };
@@ -69,11 +70,17 @@ pub fn getConversations(allocator: std.mem.Allocator, req: *http.Request, res: *
     try res.bodyWriter().print("{{\"conversations\":[", .{});
     for (rows, 0..) |row, i| {
         if (i > 0) try res.bodyWriter().print(",", .{});
+        const escaped_participants = try json_utils.escapeJson(allocator, row.participants);
+        defer allocator.free(escaped_participants);
+        const escaped_updated = try json_utils.escapeJson(allocator, row.updated_at);
+        defer allocator.free(escaped_updated);
         try res.bodyWriter().print("{{\"id\":{d},\"created_at\":\"{s}\",\"updated_at\":\"{s}\",\"participants\":\"{s}\"", .{
-            row.id, row.created_at, row.updated_at, row.participants,
+            row.id, row.created_at, escaped_updated, escaped_participants,
         });
         if (row.last_message) |msg| {
-            try res.bodyWriter().print(",\"last_message\":\"{s}\"", .{msg});
+            const escaped_msg = try json_utils.escapeJson(allocator, msg);
+            defer allocator.free(escaped_msg);
+            try res.bodyWriter().print(",\"last_message\":\"{s}\"", .{escaped_msg});
         }
         try res.bodyWriter().print(",\"unread_count\":{d}}}", .{row.unread_count});
     }
@@ -197,15 +204,23 @@ pub fn getMessages(allocator: std.mem.Allocator, req: *http.Request, res: *http.
     try res.bodyWriter().print("{{\"messages\":[", .{});
     for (rows, 0..) |row, i| {
         if (i > 0) try res.bodyWriter().print(",", .{});
+        const escaped_username = try json_utils.escapeJson(allocator, row.sender_username);
+        defer allocator.free(escaped_username);
         try res.bodyWriter().print("{{\"id\":{d},\"conversation_id\":{d},\"sender_id\":{d},\"sender_username\":\"{s}\"", .{
-            row.id, row.conversation_id, row.sender_id, row.sender_username,
+            row.id, row.conversation_id, row.sender_id, escaped_username,
         });
         if (row.sender_display_name) |name| {
-            try res.bodyWriter().print(",\"sender_display_name\":\"{s}\"", .{name});
+            const escaped_name = try json_utils.escapeJson(allocator, name);
+            defer allocator.free(escaped_name);
+            try res.bodyWriter().print(",\"sender_display_name\":\"{s}\"", .{escaped_name});
         }
-        try res.bodyWriter().print(",\"content\":\"{s}\"", .{row.content});
+        const escaped_content = try json_utils.escapeJson(allocator, row.content);
+        defer allocator.free(escaped_content);
+        try res.bodyWriter().print(",\"content\":\"{s}\"", .{escaped_content});
         if (row.media_urls) |urls| {
-            try res.bodyWriter().print(",\"media_urls\":\"{s}\"", .{urls});
+            const escaped_urls = try json_utils.escapeJson(allocator, urls);
+            defer allocator.free(escaped_urls);
+            try res.bodyWriter().print(",\"media_urls\":\"{s}\"", .{escaped_urls});
         }
         try res.bodyWriter().print(",\"read\":{d},\"created_at\":\"{s}\"}}", .{ row.read, row.created_at });
     }

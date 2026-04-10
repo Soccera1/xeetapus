@@ -154,3 +154,19 @@ pub fn validateContentLength(content: []const u8, min: usize, max: usize) ?[]con
     }
     return null;
 }
+
+pub fn isValidUrl(url: []const u8) bool {
+    if (url.len == 0) return true;
+    if (std.mem.startsWith(u8, url, "https://")) return true;
+    if (std.mem.startsWith(u8, url, "http://")) return true;
+    if (std.mem.startsWith(u8, url, "/")) return true;
+    return false;
+}
+
+pub fn isSafeUrl(url: []const u8) bool {
+    if (url.len == 0) return true;
+    if (std.mem.startsWith(u8, url, "javascript:")) return false;
+    if (std.mem.startsWith(u8, url, "data:")) return false;
+    if (std.mem.startsWith(u8, url, "vbscript:")) return false;
+    return true;
+}

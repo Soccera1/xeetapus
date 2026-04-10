@@ -6,7 +6,19 @@ const auth = @import("auth.zig");
 const CountRow = struct { count: i64 };
 const TotalViewsRow = struct { total_views: i64 };
 
+fn isValidIpAddress(ip: []const u8) bool {
+    if (ip.len == 0 or ip.len > 45) return false;
+    for (ip) |c| {
+        if (c != '.' and c != ':' and c != '[' and c != ']' and !std.ascii.isDigit(c) and !std.ascii.isAlphanumeric(c)) {
+            if (c != '%') return false;
+        }
+    }
+    return true;
+}
+
 pub fn recordView(allocator: std.mem.Allocator, post_id: i64, user_id: ?i64, ip_address: []const u8) !void {
+    const safe_ip = if (isValidIpAddress(ip_address)) ip_address else "unknown";
+
     const post_id_str = try std.fmt.allocPrint(allocator, "{d}", .{post_id});
     defer allocator.free(post_id_str);
 
@@ -21,7 +33,7 @@ pub fn recordView(allocator: std.mem.Allocator, post_id: i64, user_id: ?i64, ip_
         &[_][]const u8{
             post_id_str,
             user_id_str orelse "",
-            ip_address,
+            safe_ip,
         },
     );
 }

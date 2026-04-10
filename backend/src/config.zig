@@ -14,7 +14,11 @@ pub const Config = struct {
     cookie_secure: bool,
     cookie_http_only: bool,
     cookie_same_site: []const u8,
+    bind_addr: []const u8,
     csrf_secret: []const u8,
+    trust_proxy: bool,
+    auth_rate_limit_requests: u32,
+    auth_rate_limit_window_seconds: i64,
     argon2_time_cost: u32,
     argon2_memory_cost: u32,
     argon2_parallelism: u24,
@@ -70,6 +74,11 @@ pub const Config = struct {
             }
         }
         allocator.free(origins_str);
+
+        const bind_addr = std.process.getEnvVarOwned(allocator, "XEETAPUS_BIND_ADDR") catch blk: {
+            break :blk try allocator.dupe(u8, "0.0.0.0");
+        };
+        errdefer allocator.free(bind_addr);
 
         const csrf_secret = std.process.getEnvVarOwned(allocator, "XEETAPUS_CSRF_SECRET") catch blk: {
             std.log.warn("XEETAPUS_CSRF_SECRET not set, generating random value", .{});
@@ -132,6 +141,22 @@ pub const Config = struct {
         const cookie_secure = std.mem.eql(u8, env, "production");
         const cookie_http_only = true;
 
+        const trust_proxy = std.mem.eql(u8, env, "production");
+
+        const auth_rate_limit_str = std.process.getEnvVarOwned(allocator, "XEETAPUS_AUTH_RATE_LIMIT_REQUESTS") catch null;
+        const auth_rate_limit_requests: u32 = if (auth_rate_limit_str) |s| blk: {
+            const rl = std.fmt.parseInt(u32, s, 10) catch 5;
+            allocator.free(s);
+            break :blk rl;
+        } else 5;
+
+        const auth_rate_window_str = std.process.getEnvVarOwned(allocator, "XEETAPUS_AUTH_RATE_LIMIT_WINDOW") catch null;
+        const auth_rate_limit_window: i64 = if (auth_rate_window_str) |s| blk: {
+            const rw = std.fmt.parseInt(i64, s, 10) catch 300;
+            allocator.free(s);
+            break :blk rw;
+        } else 300;
+
         instance = Config{
             .jwt_secret = jwt_secret,
             .database_path = db_path,
@@ -146,7 +171,11 @@ pub const Config = struct {
             .cookie_secure = cookie_secure,
             .cookie_http_only = cookie_http_only,
             .cookie_same_site = "Lax",
+            .bind_addr = bind_addr,
             .csrf_secret = csrf_secret,
+            .trust_proxy = trust_proxy,
+            .auth_rate_limit_requests = auth_rate_limit_requests,
+            .auth_rate_limit_window_seconds = auth_rate_limit_window,
             .argon2_time_cost = argon2_time_cost,
             .argon2_memory_cost = argon2_memory_cost,
             .argon2_parallelism = argon2_parallelism,
@@ -161,16 +190,15 @@ pub const Config = struct {
     }
 
     pub fn isOriginAllowed(origin: []const u8) bool {
-        const cfg = instance orelse return true; // Allow all if not configured
+        const cfg = instance orelse return false;
 
         for (cfg.allowed_origins) |allowed| {
             if (std.mem.eql(u8, allowed, origin)) {
                 return true;
             }
-            // Support wildcard subdomains
             if (std.mem.startsWith(u8, allowed, "*.")) {
                 const domain = allowed[2..];
-                if (std.mem.endsWith(u8, origin, domain)) {
+                if (std.mem.endsWith(u8, origin, domain) and (origin.len == domain.len or origin[origin.len - domain.len - 1] == '.')) {
                     return true;
                 }
             }
@@ -184,6 +212,7 @@ pub const Config = struct {
             allocator.free(cfg.database_path);
             allocator.free(cfg.media_path);
             allocator.free(cfg.environment);
+            allocator.free(cfg.bind_addr);
             allocator.free(cfg.csrf_secret);
             for (cfg.allowed_origins) |origin| {
                 allocator.free(origin);
