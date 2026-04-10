@@ -91,10 +91,8 @@ pub fn register(allocator: std.mem.Allocator, req: *http.Request, res: *http.Res
     // Generate secure signed token
     const token = try security.generateSignedToken(allocator, cfg.jwt_secret, user_id, TOKEN_EXPIRATION_SECONDS);
 
-    // Generate CSRF token
-    const session_id = try security.generateSecureTokenAlloc(allocator);
-    defer allocator.free(session_id);
-    const csrf_token = try security.tokens.generateCsrfToken(allocator, cfg.csrf_secret, session_id);
+    // Generate CSRF token bound to auth token
+    const csrf_token = try security.tokens.generateCsrfToken(allocator, cfg.csrf_secret, token);
 
     // Set HTTP-only cookie with auth token
     const cookie_secure = if (cfg.cookie_secure) "; Secure" else "";
@@ -207,9 +205,7 @@ pub fn login(allocator: std.mem.Allocator, req: *http.Request, res: *http.Respon
     const cfg = try config.Config.get();
     const token = try security.generateSignedToken(allocator, cfg.jwt_secret, user.id, TOKEN_EXPIRATION_SECONDS);
 
-    const session_id = try security.generateSecureTokenAlloc(allocator);
-    defer allocator.free(session_id);
-    const csrf_token = try security.tokens.generateCsrfToken(allocator, cfg.csrf_secret, session_id);
+    const csrf_token = try security.tokens.generateCsrfToken(allocator, cfg.csrf_secret, token);
 
     const cookie_secure = if (cfg.cookie_secure) "; Secure" else "";
     const cookie_str = try std.fmt.allocPrint(allocator, "auth_token={s}; HttpOnly{s}; SameSite=Lax; Path=/; Max-Age={d}", .{

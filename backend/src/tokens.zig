@@ -203,7 +203,7 @@ pub fn verifyCsrfToken(secret: []const u8, session_id: []const u8, token: []cons
 
     // Constant-time comparison
     if (sig_hex.len != expected_sig_hex.len) return false;
-    return crypto.utils.timingSafeEql(u8, sig_hex, expected_sig_hex);
+    return crypto.utils.timingSafeEql([expected_sig_hex.len]u8, sig_hex[0..expected_sig_hex.len].*, expected_sig_hex);
 }
 
 /// Simple HMAC-SHA256 implementation

@@ -2,6 +2,7 @@ const std = @import("std");
 const http = @import("http.zig");
 const db = @import("db.zig");
 const auth = @import("auth.zig");
+const json_utils = @import("json.zig");
 
 const OwnerIdRow = struct { owner_id: i64 };
 const DummyRow = struct { _dummy: i64 };
@@ -57,14 +58,20 @@ pub fn getMyLists(allocator: std.mem.Allocator, req: *http.Request, res: *http.R
     try res.bodyWriter().print("{{\"lists\":[", .{});
     for (rows, 0..) |row, i| {
         if (i > 0) try res.bodyWriter().print(",", .{});
+        const escaped_name = try json_utils.escapeJson(allocator, row.name);
+        defer allocator.free(escaped_name);
+        const escaped_created_at = try json_utils.escapeJson(allocator, row.created_at);
+        defer allocator.free(escaped_created_at);
         try res.bodyWriter().print("{{\"id\":{d},\"owner_id\":{d},\"name\":\"{s}\"", .{
-            row.id, row.owner_id, row.name,
+            row.id, row.owner_id, escaped_name,
         });
         if (row.description) |desc| {
-            try res.bodyWriter().print(",\"description\":\"{s}\"", .{desc});
+            const escaped_desc = try json_utils.escapeJson(allocator, desc);
+            defer allocator.free(escaped_desc);
+            try res.bodyWriter().print(",\"description\":\"{s}\"", .{escaped_desc});
         }
         try res.bodyWriter().print(",\"is_private\":{d},\"member_count\":{d},\"created_at\":\"{s}\"}}", .{
-            row.is_private, row.member_count, row.created_at,
+            row.is_private, row.member_count, escaped_created_at,
         });
     }
     try res.bodyWriter().print("]}}", .{});
@@ -175,27 +182,41 @@ pub fn getList(allocator: std.mem.Allocator, req: *http.Request, res: *http.Resp
 
     res.headers.put("Content-Type", "application/json") catch {};
     const list = list_rows[0];
+    const escaped_list_name = try json_utils.escapeJson(allocator, list.name);
+    defer allocator.free(escaped_list_name);
+    const escaped_list_created_at = try json_utils.escapeJson(allocator, list.created_at);
+    defer allocator.free(escaped_list_created_at);
     try res.bodyWriter().print("{{\"list\":{{\"id\":{d},\"owner_id\":{d},\"name\":\"{s}\"", .{
-        list.id, list.owner_id, list.name,
+        list.id, list.owner_id, escaped_list_name,
     });
     if (list.description) |desc| {
-        try res.bodyWriter().print(",\"description\":\"{s}\"", .{desc});
+        const escaped_list_desc = try json_utils.escapeJson(allocator, desc);
+        defer allocator.free(escaped_list_desc);
+        try res.bodyWriter().print(",\"description\":\"{s}\"", .{escaped_list_desc});
     }
     try res.bodyWriter().print(",\"is_private\":{d},\"member_count\":{d},\"created_at\":\"{s}\"}},\"members\":[", .{
-        list.is_private, list.member_count, list.created_at,
+        list.is_private, list.member_count, escaped_list_created_at,
     });
     for (member_rows, 0..) |member, i| {
         if (i > 0) try res.bodyWriter().print(",", .{});
+        const escaped_username = try json_utils.escapeJson(allocator, member.username);
+        defer allocator.free(escaped_username);
+        const escaped_added_at = try json_utils.escapeJson(allocator, member.added_at);
+        defer allocator.free(escaped_added_at);
         try res.bodyWriter().print("{{\"id\":{d},\"username\":\"{s}\"", .{
-            member.id, member.username,
+            member.id, escaped_username,
         });
         if (member.display_name) |name| {
-            try res.bodyWriter().print(",\"display_name\":\"{s}\"", .{name});
+            const escaped_display_name = try json_utils.escapeJson(allocator, name);
+            defer allocator.free(escaped_display_name);
+            try res.bodyWriter().print(",\"display_name\":\"{s}\"", .{escaped_display_name});
         }
         if (member.avatar_url) |url| {
-            try res.bodyWriter().print(",\"avatar_url\":\"{s}\"", .{url});
+            const escaped_avatar_url = try json_utils.escapeJson(allocator, url);
+            defer allocator.free(escaped_avatar_url);
+            try res.bodyWriter().print(",\"avatar_url\":\"{s}\"", .{escaped_avatar_url});
         }
-        try res.bodyWriter().print(",\"added_at\":\"{s}\"}}", .{member.added_at});
+        try res.bodyWriter().print(",\"added_at\":\"{s}\"}}", .{escaped_added_at});
     }
     try res.bodyWriter().print("]}}", .{});
 }
@@ -464,18 +485,30 @@ pub fn getListTimeline(allocator: std.mem.Allocator, req: *http.Request, res: *h
     try res.bodyWriter().print("{{\"posts\":[", .{});
     for (rows, 0..) |row, i| {
         if (i > 0) try res.bodyWriter().print(",", .{});
+        const escaped_username = try json_utils.escapeJson(allocator, row.username);
+        defer allocator.free(escaped_username);
+        const escaped_content = try json_utils.escapeJson(allocator, row.content);
+        defer allocator.free(escaped_content);
+        const escaped_created_at = try json_utils.escapeJson(allocator, row.created_at);
+        defer allocator.free(escaped_created_at);
         try res.bodyWriter().print("{{\"id\":{d},\"user_id\":{d},\"username\":\"{s}\"", .{
-            row.id, row.user_id, row.username,
+            row.id, row.user_id, escaped_username,
         });
         if (row.display_name) |name| {
-            try res.bodyWriter().print(",\"display_name\":\"{s}\"", .{name});
+            const escaped_display_name = try json_utils.escapeJson(allocator, name);
+            defer allocator.free(escaped_display_name);
+            try res.bodyWriter().print(",\"display_name\":\"{s}\"", .{escaped_display_name});
         }
         if (row.avatar_url) |url| {
-            try res.bodyWriter().print(",\"avatar_url\":\"{s}\"", .{url});
+            const escaped_avatar_url = try json_utils.escapeJson(allocator, url);
+            defer allocator.free(escaped_avatar_url);
+            try res.bodyWriter().print(",\"avatar_url\":\"{s}\"", .{escaped_avatar_url});
         }
-        try res.bodyWriter().print(",\"content\":\"{s}\"", .{row.content});
+        try res.bodyWriter().print(",\"content\":\"{s}\"", .{escaped_content});
         if (row.media_urls) |urls| {
-            try res.bodyWriter().print(",\"media_urls\":\"{s}\"", .{urls});
+            const escaped_media_urls = try json_utils.escapeJson(allocator, urls);
+            defer allocator.free(escaped_media_urls);
+            try res.bodyWriter().print(",\"media_urls\":\"{s}\"", .{escaped_media_urls});
         } else {
             try res.bodyWriter().print(",\"media_urls\":\"\"", .{});
         }
@@ -483,7 +516,7 @@ pub fn getListTimeline(allocator: std.mem.Allocator, req: *http.Request, res: *h
             try res.bodyWriter().print(",\"reply_to_id\":{d}", .{reply});
         }
         try res.bodyWriter().print(",\"created_at\":\"{s}\",\"likes_count\":{d},\"comments_count\":{d},\"reposts_count\":{d},\"is_liked\":{d},\"is_reposted\":{d}}}", .{
-            row.created_at, row.likes_count, row.comments_count, row.reposts_count, row.is_liked, row.is_reposted,
+            escaped_created_at, row.likes_count, row.comments_count, row.reposts_count, row.is_liked, row.is_reposted,
         });
     }
     try res.bodyWriter().print("]}}", .{});

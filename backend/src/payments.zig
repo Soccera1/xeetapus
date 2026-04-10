@@ -2,6 +2,7 @@ const std = @import("std");
 const http = @import("http.zig");
 const db = @import("db.zig");
 const auth = @import("auth.zig");
+const json_utils = @import("json.zig");
 
 pub const MoneroConfig = struct {
     wallet_address: []const u8,
@@ -441,10 +442,13 @@ pub fn createInvoice(allocator: std.mem.Allocator, req: *http.Request, res: *htt
     var response = std.ArrayList(u8).init(allocator);
     defer response.deinit();
 
+    const escaped_wallet_address = try json_utils.escapeJson(allocator, monero_config.?.wallet_address);
+    defer allocator.free(escaped_wallet_address);
+
     if (using_fixed_xmr) {
-        try response.writer().print("{{\"id\":{},\"address\":\"{s}\",\"xmr_amount\":{d:.12},\"network_fee\":{d:.12},\"total_xmr\":{d:.12},\"priority\":\"{s}\",\"estimated_minutes\":{d},\"status\":\"pending\"}}", .{ invoice_id, monero_config.?.wallet_address, xmr_amount, network_fee_xmr, total_xmr, priority.toString(), priority.estimatedMinutes() });
+        try response.writer().print("{{\"id\":{},\"address\":\"{s}\",\"xmr_amount\":{d:.12},\"network_fee\":{d:.12},\"total_xmr\":{d:.12},\"priority\":\"{s}\",\"estimated_minutes\":{d},\"status\":\"pending\"}}", .{ invoice_id, escaped_wallet_address, xmr_amount, network_fee_xmr, total_xmr, priority.toString(), priority.estimatedMinutes() });
     } else {
-        try response.writer().print("{{\"id\":{},\"address\":\"{s}\",\"xmr_amount\":{d:.12},\"network_fee\":{d:.12},\"total_xmr\":{d:.12},\"fiat_amount\":{d:.2},\"fiat_currency\":\"{s}\",\"network_fee_usd\":{d:.4},\"xmr_price_usd\":{d:.2},\"priority\":\"{s}\",\"estimated_minutes\":{d},\"status\":\"pending\"}}", .{ invoice_id, monero_config.?.wallet_address, xmr_amount, network_fee_xmr, total_xmr, fiat_amount, currency, network_fee_usd, price_usd, priority.toString(), priority.estimatedMinutes() });
+        try response.writer().print("{{\"id\":{},\"address\":\"{s}\",\"xmr_amount\":{d:.12},\"network_fee\":{d:.12},\"total_xmr\":{d:.12},\"fiat_amount\":{d:.2},\"fiat_currency\":\"{s}\",\"network_fee_usd\":{d:.4},\"xmr_price_usd\":{d:.2},\"priority\":\"{s}\",\"estimated_minutes\":{d},\"status\":\"pending\"}}", .{ invoice_id, escaped_wallet_address, xmr_amount, network_fee_xmr, total_xmr, fiat_amount, currency, network_fee_usd, price_usd, priority.toString(), priority.estimatedMinutes() });
     }
 
     res.status = 201;
@@ -505,10 +509,16 @@ pub fn checkPayment(allocator: std.mem.Allocator, req: *http.Request, res: *http
     var response = std.ArrayList(u8).init(allocator);
     defer response.deinit();
 
-    try response.writer().print("{{\"id\":{},\"amount\":{},\"status\":\"{s}\",\"created_at\":\"{s}\"", .{ invoice.id, invoice.amount, invoice.status, invoice.created_at });
+    const escaped_status = try json_utils.escapeJson(allocator, invoice.status);
+    defer allocator.free(escaped_status);
+    const escaped_invoice_created_at = try json_utils.escapeJson(allocator, invoice.created_at);
+    defer allocator.free(escaped_invoice_created_at);
+    try response.writer().print("{{\"id\":{},\"amount\":{},\"status\":\"{s}\",\"created_at\":\"{s}\"", .{ invoice.id, invoice.amount, escaped_status, escaped_invoice_created_at });
 
     if (invoice.paid_at) |paid_at| {
-        try response.writer().print(",\"paid_at\":\"{s}\"", .{paid_at});
+        const escaped_paid_at = try json_utils.escapeJson(allocator, paid_at);
+        defer allocator.free(escaped_paid_at);
+        try response.writer().print(",\"paid_at\":\"{s}\"", .{escaped_paid_at});
     }
 
     try response.append('}');
@@ -553,7 +563,13 @@ pub fn getInvoices(allocator: std.mem.Allocator, req: *http.Request, res: *http.
 
     for (invoices, 0..) |invoice, i| {
         if (i > 0) try invoices_list.append(',');
-        try invoices_list.writer().print("{{\"id\":{},\"amount\":{},\"status\":\"{s}\",\"invoice\":\"{s}\",\"created_at\":\"{s}\"}}", .{ invoice.id, invoice.amount, invoice.status, invoice.invoice, invoice.created_at });
+        const escaped_status = try json_utils.escapeJson(allocator, invoice.status);
+        defer allocator.free(escaped_status);
+        const escaped_invoice = try json_utils.escapeJson(allocator, invoice.invoice);
+        defer allocator.free(escaped_invoice);
+        const escaped_created_at = try json_utils.escapeJson(allocator, invoice.created_at);
+        defer allocator.free(escaped_created_at);
+        try invoices_list.writer().print("{{\"id\":{},\"amount\":{},\"status\":\"{s}\",\"invoice\":\"{s}\",\"created_at\":\"{s}\"}}", .{ invoice.id, invoice.amount, escaped_status, escaped_invoice, escaped_created_at });
     }
 
     try invoices_list.append(']');
