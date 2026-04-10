@@ -48,6 +48,9 @@ tmp/
 temp/
 *.tmp
 
+# JS runtime
+node_modules/
+
 # Coverage
 coverage/
 *.lcov
