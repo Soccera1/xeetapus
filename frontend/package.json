@@ -2,6 +2,7 @@
   "name": "xeetapus-frontend",
   "private": true,
   "version": "1.0.0",
+  "packageManager": "bun@1.2.10",
   "type": "module",
   "scripts": {
     "dev": "vite",
