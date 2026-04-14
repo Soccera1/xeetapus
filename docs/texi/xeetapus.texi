@@ -1,0 +1,78 @@
+\input texinfo @c -*-texinfo-*-
+@c %**start of header
+@setfilename xeetapus.info
+@settitle Xeetapus Manual
+@setchapternewpage odd
+@c %**end of header
+
+@finalout
+
+@dircategory Web Services
+@direntry
+* xeetapus: (xeetapus).              A social media platform written in Zig and React.
+@end direntry
+
+@copying
+This manual is for Xeetapus, a social media platform (similar to X/Twitter).
+
+Copyright @copyright{} 2024 Xeetapus Contributors
+
+@quotation
+Permission is granted to copy, distribute and/or modify this document
+under the terms of the GNU Free Documentation License, Version 1.3 or
+any later version published by the Free Software Foundation; with no
+Invariant Sections, with no Front-Cover Texts, and with no Back-Cover
+Texts.  A copy of the license is included in the section entitled
+``GNU Free Documentation License''.
+@end quotation
+@end copying
+
+@titlepage
+@title Xeetapus Manual
+@subtitle A social media platform built with Zig and React
+@author The Xeetapus Team
+
+@page
+@vskip 0pt plus 1filll
+@insertcopying
+@end titlepage
+
+@headings double
+
+@ifnothtml
+@shortcontents
+@summarycontents
+@end ifnothtml
+
+@node Top
+@top Xeetapus
+
+Xeetapus is a fully functional social media platform featuring posts,
+comments, likes, follows, communities, direct messages, polls, and
+analytics.  The backend is written in Zig while the frontend uses React
+with TypeScript.
+
+This manual describes how to install, configure, run, develop, and
+deploy Xeetapus.
+
+@menu
+* Getting Started::              How to obtain and run Xeetapus.
+* Configuration::               Customizing Xeetapus for your environment.
+* System Architecture::          How Xeetapus is structured internally.
+* API Reference::                Complete documentation of the HTTP API.
+* Database Schema::              Description of the database tables.
+* Security Implementation::       How security is implemented.
+* Development Guide::             Modifying and extending Xeetapus.
+* Deployment Guide::              Installing Xeetapus on a production server.
+@end menu
+
+@include getting-started.texi
+@include configuration.texi
+@include architecture.texi
+@include api-reference.texi
+@include database.texi
+@include security.texi
+@include development.texi
+@include deployment.texi
+
+@bye

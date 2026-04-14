@@ -1,0 +1,638 @@
+@node Security Implementation
+@chapter Security Implementation
+
+This chapter describes the security measures implemented in Xeetapus.
+Security is a primary concern in the design of this software, and
+numerous protections are in place to safeguard user data and prevent
+unauthorized access.
+
+@menu
+* Overview::                    Summary of security features.
+* Password Security::          How passwords are protected.
+* Token Authentication::       JWT token implementation.
+* Session Management::         Cookie security settings.
+* CSRF Protection::            Preventing cross-site request forgery.
+* Rate Limiting::               Limiting request frequency.
+* CORS Policy::                 Controlling cross-origin access.
+* Security Headers::           HTTP security headers.
+* Input Validation::            Sanitizing user input.
+* Path Traversal Prevention::   Securing file access.
+* SQL Injection Prevention::    Using parameterized queries.
+* Audit Logging::               Logging security events.
+* Production Checklist::        Security hardening for deployment.
+@end menu
+
+@node Security Overview
+@section Overview
+
+Xeetapus implements security through multiple layers.  No single measure
+is foolproof, but the combination of several protections makes the
+system robust against common attack vectors.
+
+The following table summarizes the security features:
+
+@multitable @columnfractions 0.3 0.35 0.15 0.2
+@headitem Feature @tab Implementation @tab Default @tab Status
+@item Password hashing @tab PBKDF2-HMAC-SHA256 @tab 32,768 iterations @tab Enabled
+@item JWT tokens @tab HMAC-SHA256 signed @tab 7 day expiry @tab Enabled
+@item Session cookies @tab HttpOnly, Secure, SameSite=Lax @tab Varies @tab Enabled
+@item CSRF tokens @tab HMAC-SHA256 signed @tab 24 hour expiry @tab Enabled
+@item Rate limiting @tab IP-based sliding window @tab 100/minute @tab Enabled
+@item CORS @tab Whitelist-based origins @tab localhost only @tab Enabled
+@item Security headers @tab Full OWASP set @tab Production @tab Enabled
+@item Input validation @tab Strict type checking @tab Enabled @tab Enabled
+@item Path traversal prevention @tab Canonical path checking @tab Enabled @tab Enabled
+@item SQL injection prevention @tab Parameterized queries @tab Enabled @tab Enabled
+@item XSS prevention @tab Content sanitization @tab Enabled @tab Enabled
+@item Audit logging @tab Event logging @tab Disabled @tab Optional
+@end multitable
+
+These features are always enabled and cannot be disabled individually.
+This is a deliberate design choice to ensure that security is never
+accidentally weakened.
+
+@node Password Security
+@section Password Security
+
+User passwords are protected using PBKDF2-HMAC-SHA256, a key derivation
+function recommended by OWASP for password storage.
+
+@subheading How It Works
+
+When a user registers or changes their password, the following process
+occurs:
+
+@enumerate
+@item
+A cryptographically random 32-byte salt is generated.
+
+@item
+The password is combined with the salt and hashed using PBKDF2 with
+32,768 iterations (configurable).
+
+@item
+The resulting hash is stored in the database along with the salt and
+iteration count.
+
+@item
+During login, the stored parameters are retrieved, the same computation
+is performed on the submitted password, and the results are compared
+using constant-time comparison.
+@end enumerate
+
+@subheading Hash Format
+
+Password hashes are stored in the following format:
+
+@example
+$pbkdf2-sha256$v2$32768$<base64(salt)>$<base64(hash)>
+@end example
+
+This format includes the algorithm version, iteration count, salt, and
+hash, allowing future algorithm upgrades while maintaining backward
+compatibility.
+
+@subheading Strength Requirements
+
+Passwords must meet the following requirements:
+
+@itemize @bullet
+@item
+At least 8 characters in length.
+
+@item
+At least one uppercase letter.
+
+@item
+At least one lowercase letter.
+
+@item
+At least one digit.
+@end itemize
+
+These requirements are enforced during registration and password changes.
+
+@subheading Production Recommendations
+
+For production deployments, consider increasing the PBKDF2 iteration count
+to 60,000 or higher.  This increases the computational cost for
+attackers attempting to crack passwords but has minimal impact on normal
+login performance:
+
+@example
+XEETAPUS_PBKDF2_ITERATIONS=60000
+@end example
+
+@node Token Authentication
+@section Token Authentication
+
+Xeetapus uses JSON Web Tokens (JWT) for authentication.  A JWT is a
+self-contained token that encodes user identity information and is signed
+cryptographically.
+
+@subheading Token Structure
+
+A JWT consists of three parts separated by periods:
+
+@example
+base64(header).base64(payload).base64(signature)
+@end example
+
+The header specifies the algorithm:
+
+@verbatim
+@{"alg":"HS256","typ":"JWT"@}
+@end verbatim
+
+The payload contains the claims:
+
+@verbatim
+@{"sub":1,"iat":1712345678,"exp":1712432078@}
+@end verbatim
+
+@table @asis
+@item sub (subject)
+The user's ID.
+
+@item iat (issued at)
+Unix timestamp when the token was created.
+
+@item exp (expiration)
+Unix timestamp when the token expires.
+@end table
+
+The signature is computed as:
+
+@example
+HMAC-SHA256(secret, base64(header).base64(payload))
+@end example
+
+@subheading Token Validation
+
+When a request arrives with a session cookie, the server:
+
+@enumerate
+@item
+Extracts the JWT from the cookie.
+
+@item
+Splits the token into its three parts.
+
+@item
+Re-computes the expected signature using the server's secret key.
+
+@item
+Compares the computed signature with the provided signature (using
+constant-time comparison to prevent timing attacks).
+
+@item
+Checks that the expiration time has not passed.
+
+@item
+If all checks pass, the user ID from the payload is used to load the
+user's session.
+@end enumerate
+
+If any check fails, the request is rejected with a @code{401 Unauthorized}
+response.
+
+@node Session Management
+@section Session Management
+
+Sessions are managed using HTTP cookies with security attributes.
+
+@subheading Cookie Attributes
+
+The session cookie is set with the following attributes:
+
+@table @asis
+@item Name
+@code{session}
+
+@item HttpOnly
+When enabled, the cookie cannot be accessed by JavaScript.  This prevents
+cross-site scripting (XSS) attacks from stealing the session token.
+
+@item Secure
+When enabled, the cookie is only sent over HTTPS connections.  This
+prevents the token from being intercepted in transit.  This attribute is
+automatically enabled in production mode.
+
+@item SameSite=Lax
+The cookie is sent with top-level navigations from the same site and
+subsequent GET requests.  This provides some CSRF protection while
+maintaining usability.
+
+@item Max-Age
+The cookie expires after 7 days (604800 seconds) of inactivity.
+@end table
+
+@subheading Session Expiry
+
+Sessions expire automatically after 7 days of inactivity.  When a session
+expires, the user must log in again to obtain a new session token.
+
+@node CSRF Protection
+@section CSRF Protection
+
+Cross-Site Request Forgery (CSRF) is an attack where a malicious website
+tricks a user's browser into making unwanted requests to a different site
+where the user is authenticated.
+
+Xeetapus protects against CSRF using signed tokens.
+
+@subheading How It Works
+
+@enumerate
+@item
+When a user logs in, the server generates a CSRF token and includes it
+in the login response.
+
+@item
+The token is a string in the format:
+@example
+timestamp:nonce:signature
+@end example
+where the signature is computed as:
+@example
+HMAC-SHA256(secret, timestamp:nonce)
+@end example
+
+@item
+The frontend stores this token and includes it in the @code{X-CSRF-Token}
+header of all state-changing requests (POST, PUT, DELETE).
+
+@item
+The server validates the token by recomputing the signature and checking
+that the timestamp is recent (within 24 hours).
+@end enumerate
+
+@subheading Token Refresh
+
+CSRF tokens expire after 24 hours.  The frontend should periodically
+refresh the token by calling @code{GET /api/auth/me}, which returns a
+fresh CSRF token in the response.
+
+@subheading When CSRF is Required
+
+CSRF protection applies to:
+
+@itemize @bullet
+@item
+POST requests
+@item
+PUT requests
+@item
+DELETE requests
+@end itemize
+
+GET requests do not require CSRF tokens because they should not have
+side effects.
+
+@node Rate Limit Sec
+@section Rate Limiting
+
+Rate limiting prevents abuse by limiting the number of requests a client
+can make within a time window.  This helps mitigate denial-of-service
+attacks and brute force attempts.
+
+@subheading Implementation
+
+Xeetapus uses a sliding window algorithm to track request counts per IP
+address.  The window slides continuously rather than resetting at fixed
+intervals, providing smoother limiting behavior.
+
+The default configuration allows 100 requests per 60-second window.  These
+values are configurable:
+
+@example
+XEETAPUS_RATE_LIMIT_REQUESTS=100
+XEETAPUS_RATE_LIMIT_WINDOW=60
+@end example
+
+@subheading Response Headers
+
+Every response includes headers indicating the current rate limit status:
+
+@example
+X-RateLimit-Limit: 100
+X-RateLimit-Remaining: 95
+X-RateLimit-Reset: 1712345678
+@end example
+
+@subheading When Limited
+
+When a client exceeds the limit, the server responds with @code{429 Too
+Many Requests}:
+
+@verbatim
+@{
+  "error": "Rate limit exceeded. Please try again later.",
+  "status": "error"
+@}
+@end verbatim
+
+The client should wait until the @code{X-RateLimit-Reset} timestamp
+before making additional requests.
+
+@node CORS Policy
+@section CORS Policy
+
+Cross-Origin Resource Sharing (CORS) controls which websites can make
+API requests to Xeetapus from browsers.
+
+@subheading Configuration
+
+The allowed origins are configured via the @env{XEETAPUS_ALLOWED_ORIGINS}
+environment variable:
+
+@example
+XEETAPUS_ALLOWED_ORIGINS=https://example.com,https://www.example.com
+@end example
+
+By default, only @code{http://localhost:3000} is allowed, suitable for
+development.
+
+@quotation Important
+Never use wildcard origins (@code{*}) in production.  Always specify
+exact domains.
+@end quotation
+
+@subheading Wildcard Subdomains
+
+For convenience, a limited wildcard pattern is supported for subdomains:
+
+@example
+XEETAPUS_ALLOWED_ORIGINS=*.example.com
+@end example
+
+This allows @code{app.example.com}, @code{api.example.com}, etc., while
+still requiring an exact match for the root domain.
+
+@subheading How It Works
+
+For requests that include credentials (cookies), the server responds with
+the specific origin in the @code{Access-Control-Allow-Origin} header
+rather than @code{*}.  This allows browsers to enforce CORS policy while
+permitting authenticated requests.
+
+@node Security Headers
+@section Security Headers
+
+The HTTP server sets several security-related headers on all responses.
+
+@subheading Header Reference
+
+@table @asis
+@item X-Frame-Options: DENY
+Prevents the page from being displayed in an iframe, protecting against
+clickjacking attacks.
+
+@item X-Content-Type-Options: nosniff
+Prevents browsers from guessing the content type, which could lead to
+XSS attacks through MIME type confusion.
+
+@item X-XSS-Protection: 1; mode=block
+Enables the browser's built-in XSS filter (for older browsers).
+
+@item Referrer-Policy: strict-origin-when-cross-origin
+Controls what information is sent in the Referer header when navigating
+between sites.
+
+@item Permissions-Policy: geolocation=(), microphone=(), camera=()
+Disables browser features that are not needed by the application.
+
+@item Content-Security-Policy
+Restricts which resources can be loaded and from where.  The exact policy
+is configured in the source code.
+
+@item Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
+(In production only) Forces browsers to use HTTPS for all future requests
+to the domain.
+@end table
+
+These headers provide defense-in-depth against common web vulnerabilities.
+
+@node Input Validation
+@section Input Validation
+
+All user input is validated before processing.  This prevents malformed
+data from causing issues and blocks common attack patterns.
+
+@subheading Username Validation
+
+Usernames must:
+
+@itemize @bullet
+@item
+Be between 3 and 30 characters long.
+
+@item
+Contain only letters, numbers, underscores, and hyphens.
+
+@item
+Start with a letter.
+@end itemize
+
+@subheading Email Validation
+
+Email addresses must:
+
+@itemize @bullet
+@item
+Be between 5 and 254 characters long.
+
+@item
+Contain exactly one @code{@@} symbol.
+
+@item
+Contain at least one character before and after the @code{@@}.
+
+@item
+Contain at least one dot after the @code{@@}.
+
+@item
+Contain no consecutive dots.
+@end itemize
+
+@subheading Password Validation
+
+@xref{Password Security}.
+
+@subheading XSS Prevention
+
+User-supplied content is sanitized to prevent cross-site scripting.
+The following characters are escaped in output:
+
+@itemize @bullet
+@item
+@code{<} becomes @code{&lt;}
+@item
+@code{>} becomes @code{&gt;}
+@item
+@code{&} becomes @code{&amp;}
+@item
+@code{"} becomes @code{&quot;}
+@item
+@code{'} becomes @code{&#x27;}
+@item
+@code{/} becomes @code{&#x2F;}
+@end itemize
+
+This ensures that any HTML or JavaScript embedded in user content is
+rendered harmlessly as text rather than executed as code.
+
+@node Path Traversal Prevention
+@section Path Traversal Prevention
+
+When serving static files, the server must ensure that file paths cannot
+escape the intended directory.
+
+@subheading How It Works
+
+Before serving a file:
+
+@enumerate
+@item
+The server receives a request path.
+
+@item
+The path is checked for suspicious patterns such as @code{..},
+@code{~}, or absolute path indicators.
+
+@item
+If any are found, the request is rejected with @code{403 Forbidden}.
+
+@item
+Otherwise, the path is converted to a canonical absolute path.
+
+@item
+The canonical path is verified to be within the allowed directory.
+
+@item
+If it is, the file is served; otherwise, the request is rejected.
+@end enumerate
+
+This prevents attackers from accessing sensitive files such as
+@file{/etc/passwd} or the application configuration.
+
+@node SQL Injection Prevention
+@section SQL Injection Prevention
+
+SQL injection occurs when user input is incorporated directly into SQL
+queries, allowing attackers to manipulate the query structure.
+
+@subheading Prevention
+
+Xeetapus prevents SQL injection by using parameterized queries exclusively.
+Values are never interpolated directly into SQL strings.
+
+@quotation Safe Example
+@example
+const users = try db.query("SELECT * FROM users WHERE username = ?",
+    &[_][]const u8@{username@});
+@end example
+@end quotation
+
+@quotation Dangerous Example
+Do not use string formatting to build queries:
+@verbatim
+-- DO NOT DO THIS
+const sql = try std.fmt.allocPrint(
+    "SELECT * FROM users WHERE username = '{s}'",
+    .@{username@});
+@end verbatim
+@end quotation
+
+Parameterized queries ensure that user input is always treated as data,
+never as SQL code.
+
+@node Audit Logging
+@section Audit Logging
+
+Security-relevant events are logged for monitoring and forensic purposes.
+
+@subheading Configuration
+
+Audit logging is controlled by the environment:
+
+@itemize @bullet
+@item
+In development, logs are written to stdout.
+
+@item
+In production, logs are written to @file{/var/log/xeetapus.log}.
+@end itemize
+
+Ensure proper permissions on the log file and consider log rotation.
+
+@subsection Logged Events
+
+The following events are recorded:
+
+@table @asis
+@item Authentication
+Login attempts (both successful and failed), logout events, registration
+events.
+
+@item Account
+Password changes, email changes, account deletions.
+
+@item Social
+Blocks and unblocks.
+
+@item Content
+Post creation and deletion.
+@end table
+
+Each log entry includes a timestamp, event type, affected user ID, and
+relevant details.
+
+@node Production Checklist
+@section Production Checklist
+
+Before deploying Xeetapus to production, ensure that the following
+security measures are in place:
+
+@itemize @bullet
+@item
+Generate strong secrets for JWT and CSRF using @code{openssl rand -base64 64}
+and @code{openssl rand -base64 32}.
+
+@item
+Set @env{XEETAPUS_ENV=production}.
+
+@item
+Configure @env{XEETAPUS_ALLOWED_ORIGINS} with your exact domain(s).
+
+@item
+Enable HTTPS with a valid SSL certificate.
+
+@item
+Set secure file permissions on the database and configuration files:
+@example
+chmod 600 xeetapus.db
+chmod 600 .env
+@end example
+
+@item
+Run the application under a dedicated user account with limited
+permissions.
+
+@item
+Configure a firewall to restrict access to the server.
+
+@item
+Set up log rotation for audit logs.
+
+@item
+Configure regular database backups.
+
+@item
+Consider enabling HSTS preload.
+@end itemize
+
+@cindex security
+@cindex authentication
+@cindex CSRF
+@cindex rate limiting
