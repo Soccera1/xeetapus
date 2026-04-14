@@ -42,7 +42,23 @@ build_backend() {
         fi
     fi
 
-    (cd "$ROOT_DIR/backend" && env ZIG_LOCAL_CACHE_DIR=/tmp/zig-cache ZIG_GLOBAL_CACHE_DIR=/tmp/zig-global-cache zig build -Doptimize=ReleaseFast)
+    ZIG_CACHE_SUFFIX="$(id -u)"
+    (cd "$ROOT_DIR/backend" && env ZIG_LOCAL_CACHE_DIR="/tmp/zig-cache-${ZIG_CACHE_SUFFIX}" ZIG_GLOBAL_CACHE_DIR="/tmp/zig-global-cache-${ZIG_CACHE_SUFFIX}" zig build -Doptimize=ReleaseFast)
+}
+
+build_docs() {
+    log "Building unified HTML docs..."
+
+    if command -v just >/dev/null 2>&1; then
+        if just --list 2>/dev/null | grep -Eq '(^|[[:space:]])docs-html-single([[:space:]]|$)'; then
+            (cd "$ROOT_DIR" && just docs-html-single)
+            return
+        fi
+    fi
+
+    (cd "$ROOT_DIR/docs/texi" && texi2any --html --no-split -o xeetapus.html xeetapus.texi)
+    mkdir -p "$ROOT_DIR/backend/src/generated"
+    cp "$ROOT_DIR/docs/texi/xeetapus.html" "$ROOT_DIR/backend/src/generated/docs.html"
 }
 
 stop_existing_instance() {
@@ -93,6 +109,7 @@ start_instance() {
 main() {
     require_root
     trap restore_project_ownership EXIT
+    build_docs
     build_backend
     stop_existing_instance
     install_binary
