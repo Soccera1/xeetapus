@@ -23,7 +23,7 @@ const llm = @import("llm.zig");
 const payments = @import("payments.zig");
 
 const PUBLIC_DIR = "./dist";
-const DOCS_HTML_PATH = "./docs/texi/xeetapus.html";
+const DOCS_HTML = @embedFile("generated/docs.html");
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -326,23 +326,9 @@ fn serveIndexHtml(allocator: std.mem.Allocator, res: *http.Response) !void {
     try res.append(content);
 }
 
-fn serveDocsHtml(allocator: std.mem.Allocator, _: *http.Request, res: *http.Response) !void {
-    const docs_file = std.fs.cwd().openFile(DOCS_HTML_PATH, .{}) catch {
-        res.status = 404;
-        res.headers.put("Content-Type", "text/plain") catch {};
-        try res.append("Not Found");
-        return;
-    };
-    defer docs_file.close();
-
-    const content = docs_file.readToEndAlloc(allocator, 1024 * 1024 * 5) catch {
-        res.status = 500;
-        return;
-    };
-    defer allocator.free(content);
-
+fn serveDocsHtml(_: std.mem.Allocator, _: *http.Request, res: *http.Response) !void {
     res.headers.put("Content-Type", "text/html") catch {};
-    try res.append(content);
+    try res.append(DOCS_HTML);
 }
 
 fn getContentType(path: []const u8) []const u8 {

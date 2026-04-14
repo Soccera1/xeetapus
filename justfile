@@ -30,15 +30,17 @@ stop:
 # Build the backend (Zig)
 build-backend:
     @echo "📦 Building Zig backend..."
-    @mkdir -p /tmp/zig-cache /tmp/zig-global-cache
-    @cd backend && env ZIG_LOCAL_CACHE_DIR=/tmp/zig-cache ZIG_GLOBAL_CACHE_DIR=/tmp/zig-global-cache zig build
+    @mkdir -p /tmp/zig-cache-$(id -u) /tmp/zig-global-cache-$(id -u)
+    @just docs-html-single
+    @cd backend && env ZIG_LOCAL_CACHE_DIR=/tmp/zig-cache-$(id -u) ZIG_GLOBAL_CACHE_DIR=/tmp/zig-global-cache-$(id -u) zig build
     @echo "✅ Backend build complete!"
 
 # Build the backend release binary
 build-backend-release:
     @echo "📦 Building release Zig backend..."
-    @mkdir -p /tmp/zig-cache /tmp/zig-global-cache
-    @cd backend && env ZIG_LOCAL_CACHE_DIR=/tmp/zig-cache ZIG_GLOBAL_CACHE_DIR=/tmp/zig-global-cache zig build -Doptimize=ReleaseFast
+    @mkdir -p /tmp/zig-cache-$(id -u) /tmp/zig-global-cache-$(id -u)
+    @just docs-html-single
+    @cd backend && env ZIG_LOCAL_CACHE_DIR=/tmp/zig-cache-$(id -u) ZIG_GLOBAL_CACHE_DIR=/tmp/zig-global-cache-$(id -u) zig build -Doptimize=ReleaseFast
     @echo "✅ Release backend build complete!"
 
 # Build the frontend (React)
@@ -100,6 +102,7 @@ docs-clean:
     @echo "🧹 Cleaning documentation artifacts..."
     @rm -rf docs/texi/html
     @rm -f docs/texi/xeetapus.info docs/texi/xeetapus.html docs/texi/xeetapus
+    @rm -f backend/src/generated/docs.html
     @echo "✅ Documentation clean complete!"
 
 # Build Info documentation
@@ -121,6 +124,8 @@ docs-html-single:
     @echo "📚 Building unified HTML documentation..."
     @mkdir -p docs/texi
     @cd docs/texi && texi2any --html --no-split -o xeetapus.html xeetapus.texi
+    @mkdir -p backend/src/generated
+    @cp docs/texi/xeetapus.html backend/src/generated/docs.html
     @echo "✅ Unified HTML doc built: docs/texi/xeetapus.html"
 
 # Build all documentation formats

@@ -2,6 +2,7 @@
 backend/.zig-cache/
 backend/zig-out/
 backend/build/
+backend/src/generated
 *.o
 *.obj
 *.exe
