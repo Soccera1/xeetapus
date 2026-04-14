@@ -4,6 +4,7 @@ const db = @import("db.zig");
 const auth = @import("auth.zig");
 const json_utils = @import("json.zig");
 const notifications = @import("notifications.zig");
+const validation = @import("validation.zig");
 
 pub const Profile = struct {
     id: i64,
@@ -665,6 +666,15 @@ pub fn updateProfile(allocator: std.mem.Allocator, req: *http.Request, res: *htt
             res.status = 400;
             res.headers.put("Content-Type", "application/json") catch {};
             try res.append("{\"error\":\"Display name must be 50 characters or less\"}");
+            return;
+        }
+    }
+
+    if (body.avatar_url) |url| {
+        if (!validation.isValidUrl(url) or !validation.isSafeUrl(url)) {
+            res.status = 400;
+            res.headers.put("Content-Type", "application/json") catch {};
+            try res.append("{\"error\":\"Invalid avatar URL\"}");
             return;
         }
     }

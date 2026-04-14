@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Send, MessageCircle, Image, X } from 'lucide-react';
+import { isSafeUrl } from '../lib/utils';
 
 export function MessagesPage() {
     const { user } = useAuth();
@@ -204,14 +205,14 @@ export function MessagesPage() {
                                                                             controls
                                                                             className="w-full h-auto max-h-48"
                                                                         />
-                                                                    ) : (
+                                                                    ) : url && isSafeUrl(url) ? (
                                                                         <div className="flex items-center gap-2 p-2">
                                                                             <Image className="h-4 w-4" />
                                                                             <a href={url} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline text-sm">
                                                                                 View media
                                                                             </a>
                                                                         </div>
-                                                                    )}
+                                                                    ) : null}
                                                                 </div>
                                                             ))}
                                                         </div>

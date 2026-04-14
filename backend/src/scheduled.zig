@@ -2,6 +2,7 @@ const std = @import("std");
 const http = @import("http.zig");
 const db = @import("db.zig");
 const auth = @import("auth.zig");
+const json_utils = @import("json.zig");
 
 const UserIdRow = struct { user_id: i64 };
 
@@ -46,14 +47,22 @@ pub fn getScheduledPosts(allocator: std.mem.Allocator, req: *http.Request, res: 
     try res.bodyWriter().print("{{\"scheduled_posts\":[", .{});
     for (rows, 0..) |row, i| {
         if (i > 0) try res.bodyWriter().print(",", .{});
+        const escaped_content = try json_utils.escapeJson(allocator, row.content);
+        defer allocator.free(escaped_content);
+        const escaped_scheduled_at = try json_utils.escapeJson(allocator, row.scheduled_at);
+        defer allocator.free(escaped_scheduled_at);
+        const escaped_created_at = try json_utils.escapeJson(allocator, row.created_at);
+        defer allocator.free(escaped_created_at);
         try res.bodyWriter().print("{{\"id\":{d},\"user_id\":{d},\"content\":\"{s}\"", .{
-            row.id, row.user_id, row.content,
+            row.id, row.user_id, escaped_content,
         });
         if (row.media_urls) |urls| {
-            try res.bodyWriter().print(",\"media_urls\":\"{s}\"", .{urls});
+            const escaped_media_urls = try json_utils.escapeJson(allocator, urls);
+            defer allocator.free(escaped_media_urls);
+            try res.bodyWriter().print(",\"media_urls\":\"{s}\"", .{escaped_media_urls});
         }
         try res.bodyWriter().print(",\"scheduled_at\":\"{s}\",\"created_at\":\"{s}\",\"is_posted\":{d}}}", .{
-            row.scheduled_at, row.created_at, row.is_posted,
+            escaped_scheduled_at, escaped_created_at, row.is_posted,
         });
     }
     try res.bodyWriter().print("]}}", .{});

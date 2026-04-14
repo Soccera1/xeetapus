@@ -8,6 +8,7 @@ import { Heart, MessageCircle, Repeat2, Bookmark, Eye, Pin, Image, Quote, Trash2
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { LlmChatDialog } from './LlmChatDialog';
+import { isSafeUrl } from '../lib/utils';
 
 interface PostCardProps {
     post: Post;
@@ -282,14 +283,14 @@ export function PostCard({ post, onUpdate, onDelete }: PostCardProps) {
                                                 controls
                                                 className="w-full h-auto max-h-80"
                                             />
-                                        ) : (
+                                        ) : url && isSafeUrl(url) ? (
                                             <div className="flex items-center gap-2 p-4">
                                                 <Image className="h-5 w-5" />
                                                 <a href={url} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">
                                                     View media
                                                 </a>
                                             </div>
-                                        )}
+                                        ) : null}
                                     </div>
                                 ))}
                             </div>

@@ -23,7 +23,6 @@ pub const RateLimiter = struct {
     }
 
     pub fn deinit(self: *RateLimiter) void {
-        // Free all keys
         var it = self.entries.keyIterator();
         while (it.next()) |key| {
             self.allocator.free(key.*);
@@ -31,8 +30,6 @@ pub const RateLimiter = struct {
         self.entries.deinit();
     }
 
-    /// Check if request is allowed and increment counter
-    /// Returns true if allowed, false if rate limited
     pub fn check(self: *RateLimiter, key: []const u8) !bool {
         self.mutex.lock();
         defer self.mutex.unlock();
@@ -41,15 +38,12 @@ pub const RateLimiter = struct {
 
         const entry = self.entries.getPtr(key);
         if (entry) |e| {
-            // Check if window has expired
             if (now - e.window_start > self.window_seconds) {
-                // Reset window
                 e.count = 1;
                 e.window_start = now;
                 return true;
             }
 
-            // Check if under limit
             if (e.count >= self.max_requests) {
                 return false;
             }
@@ -57,7 +51,6 @@ pub const RateLimiter = struct {
             e.count += 1;
             return true;
         } else {
-            // New entry
             const key_copy = try self.allocator.dupe(u8, key);
             errdefer self.allocator.free(key_copy);
 
@@ -69,7 +62,6 @@ pub const RateLimiter = struct {
         }
     }
 
-    /// Get rate limit status for a key
     pub fn getStatus(self: *RateLimiter, key: []const u8) struct { allowed: bool, remaining: u32, reset_time: i64 } {
         self.mutex.lock();
         defer self.mutex.unlock();
@@ -79,7 +71,6 @@ pub const RateLimiter = struct {
         const entry = self.entries.get(key);
         if (entry) |e| {
             if (now - e.window_start > self.window_seconds) {
-                // Window expired
                 return .{
                     .allowed = true,
                     .remaining = self.max_requests,
@@ -102,7 +93,6 @@ pub const RateLimiter = struct {
         };
     }
 
-    /// Clean up expired entries (call periodically)
     pub fn cleanup(self: *RateLimiter) void {
         self.mutex.lock();
         defer self.mutex.unlock();
@@ -126,23 +116,93 @@ pub const RateLimiter = struct {
     }
 };
 
-/// Get client IP from request, considering X-Forwarded-For header
-pub fn getClientIp(req_headers: std.StringHashMap([]const u8), remote_addr: std.net.Address) []const u8 {
-    _ = remote_addr;
-    // Check X-Forwarded-For header (for requests behind proxy)
-    if (req_headers.get("x-forwarded-for")) |forwarded| {
-        // Take the first IP in the chain
-        if (std.mem.indexOf(u8, forwarded, ",")) |comma| {
-            return std.mem.trim(u8, forwarded[0..comma], " ");
+pub fn formatRemoteAddr(addr: std.net.Address, buf: []u8) []const u8 {
+    return std.fmt.bufPrint(buf, "{}", .{addr}) catch "unknown";
+}
+
+pub fn getClientIp(remote_ip: []const u8, req_headers: std.StringHashMap([]const u8), trust_proxy: bool) []const u8 {
+    if (trust_proxy) {
+        if (req_headers.get("x-forwarded-for")) |forwarded| {
+            if (std.mem.indexOf(u8, forwarded, ",")) |comma| {
+                const first_ip = std.mem.trim(u8, forwarded[0..comma], " ");
+                if (isValidIpv4(first_ip) or isValidIpv6(first_ip)) {
+                    return first_ip;
+                }
+            }
+            if (isValidIpv4(forwarded) or isValidIpv6(forwarded)) {
+                return forwarded;
+            }
         }
-        return forwarded;
+
+        if (req_headers.get("x-real-ip")) |real_ip| {
+            if (isValidIpv4(real_ip) or isValidIpv6(real_ip)) {
+                return real_ip;
+            }
+        }
     }
 
-    // Check X-Real-IP header
-    if (req_headers.get("x-real-ip")) |real_ip| {
-        return real_ip;
+    if (remote_ip.len > 0 and !std.mem.eql(u8, remote_ip, "unknown")) {
+        return remote_ip;
     }
 
-    // Fall back to remote address
     return "unknown";
+}
+
+fn isValidIpv4(ip: []const u8) bool {
+    var octets: u8 = 0;
+    var digit_count: u8 = 0;
+    var current: u32 = 0;
+    var has_digit = false;
+    for (ip) |c| {
+        if (c == '.') {
+            if (!has_digit) return false;
+            if (current > 255) return false;
+            octets += 1;
+            current = 0;
+            digit_count = 0;
+            has_digit = false;
+        } else if (std.ascii.isDigit(c)) {
+            digit_count += 1;
+            if (digit_count > 3) return false;
+            current = current * 10 + (c - '0');
+            has_digit = true;
+        } else {
+            return false;
+        }
+    }
+    if (!has_digit) return false;
+    if (current > 255) return false;
+    return octets == 3;
+}
+
+fn isValidIpv6(ip: []const u8) bool {
+    if (ip.len < 2) return false;
+    var colons: u8 = 0;
+    var digit_count: u8 = 0;
+    var has_double_colon = false;
+    var i: usize = 0;
+    while (i < ip.len) : (i += 1) {
+        const c = ip[i];
+        if (c == ':') {
+            if (i + 1 < ip.len and ip[i + 1] == ':') {
+                if (has_double_colon) return false;
+                has_double_colon = true;
+                i += 1;
+                colons += 1;
+                digit_count = 0;
+            } else {
+                colons += 1;
+                digit_count = 0;
+            }
+        } else if (std.ascii.isHex(c)) {
+            digit_count += 1;
+            if (digit_count > 4) return false;
+        } else if (c == '.' and i > 0) {
+            break;
+        } else {
+            return false;
+        }
+    }
+    if (!has_double_colon and colons < 2) return false;
+    return true;
 }
