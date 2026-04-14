@@ -13,7 +13,7 @@ const ALLOWED_EXTENSIONS = .{
     .{ ".png", "image/png" },
     .{ ".gif", "image/gif" },
     .{ ".webp", "image/webp" },
-    .{ ".svg", "image/svg+xml" },
+
     .{ ".mp4", "video/mp4" },
     .{ ".webm", "video/webm" },
     .{ ".mov", "video/quicktime" },
@@ -104,10 +104,13 @@ pub fn upload(allocator: std.mem.Allocator, req: *http.Request, res: *http.Respo
     };
 
     // Generate filename
+    var random_suffix: [8]u8 = undefined;
+    std.crypto.random.bytes(&random_suffix);
+    const random_hex = std.fmt.bytesToHex(random_suffix, .lower);
     const filename = if (is_profile)
         try std.fmt.allocPrint(allocator, "profile{s}", .{extension})
     else
-        try std.fmt.allocPrint(allocator, "{d}{s}", .{ std.time.timestamp(), extension });
+        try std.fmt.allocPrint(allocator, "{d}_{s}{s}", .{ std.time.timestamp(), &random_hex, extension });
     defer allocator.free(filename);
 
     // Build full file path
@@ -295,8 +298,35 @@ pub fn serveMedia(allocator: std.mem.Allocator, req: *http.Request, res: *http.R
     const file_path = try std.fs.path.join(allocator, &[_][]const u8{ cfg.media_path, username, filename });
     defer allocator.free(file_path);
 
+    // Resolve canonical path and verify it stays within media directory (symlink protection)
+    const abs_path = std.fs.cwd().realpathAlloc(allocator, file_path) catch {
+        res.status = 404;
+        res.headers.put("Content-Type", "application/json") catch {};
+        try res.append("{\"error\":\"File not found\"}");
+        return;
+    };
+    defer allocator.free(abs_path);
+
+    const media_dir_abs = std.fs.cwd().realpathAlloc(allocator, cfg.media_path) catch {
+        res.status = 500;
+        res.headers.put("Content-Type", "application/json") catch {};
+        try res.append("{\"error\":\"Server error\"}");
+        return;
+    };
+    defer allocator.free(media_dir_abs);
+
+    const media_dir_with_sep = try std.fmt.allocPrint(allocator, "{s}/", .{media_dir_abs});
+    defer allocator.free(media_dir_with_sep);
+
+    if (!std.mem.startsWith(u8, abs_path, media_dir_with_sep) and !std.mem.eql(u8, abs_path, media_dir_abs)) {
+        res.status = 403;
+        res.headers.put("Content-Type", "application/json") catch {};
+        try res.append("{\"error\":\"Forbidden\"}");
+        return;
+    }
+
     // Open and serve file
-    const file = std.fs.cwd().openFile(file_path, .{}) catch |err| {
+    const file = std.fs.cwd().openFile(abs_path, .{}) catch |err| {
         if (err == std.fs.File.OpenError.FileNotFound) {
             res.status = 404;
             res.headers.put("Content-Type", "application/json") catch {};

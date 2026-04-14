@@ -236,31 +236,42 @@ pub const Route = struct {
 pub const Server = struct {
     allocator: std.mem.Allocator,
     port: u16,
+    bind_addr: []const u8,
     routes: std.ArrayListUnmanaged(Route),
     rate_limiter: ratelimit.RateLimiter,
+    auth_rate_limiter: ratelimit.RateLimiter,
     max_request_size: usize,
     is_production: bool,
+    trust_proxy: bool,
+    csrf_secret: []const u8,
 
     pub fn init(allocator: std.mem.Allocator, port: u16) !Server {
         const cfg = config.Config.get() catch {
-            // Use defaults if config not loaded
             return .{
                 .allocator = allocator,
                 .port = port,
+                .bind_addr = "0.0.0.0",
                 .routes = .{},
                 .rate_limiter = ratelimit.RateLimiter.init(allocator, 100, 60),
-                .max_request_size = 10 * 1024 * 1024, // 10MB default
+                .auth_rate_limiter = ratelimit.RateLimiter.init(allocator, 5, 300),
+                .max_request_size = 10 * 1024 * 1024,
                 .is_production = false,
+                .trust_proxy = false,
+                .csrf_secret = "",
             };
         };
 
         return .{
             .allocator = allocator,
             .port = port,
+            .bind_addr = cfg.bind_addr,
             .routes = .{},
             .rate_limiter = ratelimit.RateLimiter.init(allocator, cfg.rate_limit_requests, cfg.rate_limit_window_seconds),
+            .auth_rate_limiter = ratelimit.RateLimiter.init(allocator, cfg.auth_rate_limit_requests, cfg.auth_rate_limit_window_seconds),
             .max_request_size = cfg.max_request_size,
             .is_production = config.isProduction(),
+            .trust_proxy = cfg.trust_proxy,
+            .csrf_secret = cfg.csrf_secret,
         };
     }
 
@@ -270,6 +281,7 @@ pub const Server = struct {
         }
         self.routes.deinit(self.allocator);
         self.rate_limiter.deinit();
+        self.auth_rate_limiter.deinit();
     }
 
     pub fn addRoute(self: *Server, method: []const u8, path: []const u8, handler: Handler) !void {
@@ -297,7 +309,7 @@ pub const Server = struct {
     }
 
     pub fn start(self: *Server) !void {
-        const address = try net.Address.parseIp4("0.0.0.0", self.port);
+        const address = try net.Address.parseIp4(self.bind_addr, self.port);
         var listener = try net.Address.listen(address, .{
             .reuse_address = true,
         });
@@ -363,7 +375,9 @@ pub const Server = struct {
         }
 
         // Check rate limit
-        const client_ip = ratelimit.getClientIp(req.headers, connection.address);
+        var remote_ip_buf: [64]u8 = undefined;
+        const remote_ip = ratelimit.formatRemoteAddr(connection.address, &remote_ip_buf);
+        const client_ip = ratelimit.getClientIp(remote_ip, req.headers, self.trust_proxy);
         var rate_key_buf: [512]u8 = undefined;
         const rate_key = std.fmt.bufPrint(&rate_key_buf, "{s}:{s}", .{ client_ip, req.path }) catch client_ip;
 
@@ -391,6 +405,63 @@ pub const Server = struct {
                 std.log.debug("Failed to send rate limit response: {s}", .{@errorName(err)});
             };
             return;
+        }
+
+        // Stricter rate limiting for authentication endpoints
+        const is_auth_endpoint = std.mem.eql(u8, req.path, "/api/auth/register") or
+            std.mem.eql(u8, req.path, "/api/auth/login");
+        if (is_auth_endpoint) {
+            var auth_key_buf: [512]u8 = undefined;
+            const auth_key = std.fmt.bufPrint(&auth_key_buf, "auth:{s}", .{client_ip}) catch client_ip;
+            const auth_allowed = self.auth_rate_limiter.check(auth_key) catch {
+                res.status = 500;
+                res.append("Rate limiter error") catch {};
+                res.send(connection.stream, origin) catch {};
+                return;
+            };
+            if (!auth_allowed) {
+                res.status = 429;
+                res.headers.put("Content-Type", "application/json") catch {};
+                res.append("{\"error\":\"Too many authentication attempts. Please try again later.\"}") catch {};
+                res.send(connection.stream, origin) catch {};
+                return;
+            }
+        }
+
+        // CSRF token validation for state-changing requests
+        const is_state_changing = std.mem.eql(u8, req.method, "POST") or
+            std.mem.eql(u8, req.method, "PUT") or
+            std.mem.eql(u8, req.method, "DELETE");
+        if (is_state_changing) {
+            const auth_cookie = blk: {
+                if (req.headers.get("cookie")) |cookie_header| {
+                    var it = std.mem.splitScalar(u8, cookie_header, ';');
+                    while (it.next()) |cookie| {
+                        const trimmed = std.mem.trim(u8, cookie, " ");
+                        if (std.mem.startsWith(u8, trimmed, "auth_token=")) {
+                            break :blk trimmed[11..];
+                        }
+                    }
+                }
+                break :blk @as(?[]const u8, null);
+            };
+
+            if (auth_cookie) |token| {
+                const csrf_header = req.headers.get("x-csrf-token") orelse {
+                    res.status = 403;
+                    res.headers.put("Content-Type", "application/json") catch {};
+                    res.append("{\"error\":\"CSRF token required\"}") catch {};
+                    res.send(connection.stream, origin) catch {};
+                    return;
+                };
+                if (!@import("tokens.zig").verifyCsrfToken(self.csrf_secret, token, csrf_header)) {
+                    res.status = 403;
+                    res.headers.put("Content-Type", "application/json") catch {};
+                    res.append("{\"error\":\"Invalid CSRF token\"}") catch {};
+                    res.send(connection.stream, origin) catch {};
+                    return;
+                }
+            }
         }
 
         // Find matching route

@@ -37,7 +37,7 @@ build-backend:
 # Build the frontend (React)
 build-frontend:
     @echo "📦 Building React frontend..."
-    @cd frontend && npm install && npm run build
+    @cd frontend && bun install && bun run build
     @echo "✅ Frontend build complete!"
 
 # Build everything
@@ -52,7 +52,7 @@ run-backend: build-backend
 # Run the frontend only (Vite dev server)
 run-frontend:
     @echo "🚀 Starting React frontend on port 3000..."
-    @cd frontend && npm run dev
+    @cd frontend && bun run dev
 
 # Run both backend and frontend (production mode)
 run:
@@ -62,7 +62,7 @@ run:
     @echo "🚀 Starting services..."
     @cd backend && env $(cat .env | grep -v '^#' | xargs) ./zig-out/bin/xeetapus-backend &
     @sleep 3
-    @cd frontend && npx serve dist -p 3000 &
+    @cd frontend && bunx serve dist -p 3000 &
     @echo ""
     @echo "✅ Xeetapus is running!"
     @echo "   Backend:  http://localhost:8080"
@@ -79,7 +79,7 @@ dev:
     @echo "🚀 Starting services..."
     @cd backend && env $(cat .env | grep -v '^#' | xargs) ./zig-out/bin/xeetapus-backend &
     @sleep 2
-    @cd frontend && npm run dev &
+    @cd frontend && bun run dev &
     @echo ""
     @echo "✅ Xeetapus is running!"
     @echo "   Backend:  http://localhost:8080"

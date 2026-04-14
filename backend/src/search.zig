@@ -23,7 +23,7 @@ pub fn searchUsers(allocator: std.mem.Allocator, req: *http.Request, res: *http.
     const sql =
         \\SELECT id, username, display_name, avatar_url
         \\FROM users
-        \\WHERE username LIKE ? OR display_name LIKE ?
+        \\WHERE username LIKE ? ESCAPE '\' OR display_name LIKE ? ESCAPE '\'
         \\ORDER BY username
         \\LIMIT 20
     ;
@@ -35,7 +35,15 @@ pub fn searchUsers(allocator: std.mem.Allocator, req: *http.Request, res: *http.
         avatar_url: []const u8,
     };
 
-    const search_pattern = try std.fmt.allocPrint(allocator, "%{s}%", .{query});
+    var escaped_query = std.ArrayList(u8).init(allocator);
+    defer escaped_query.deinit();
+    for (query) |c| {
+        if (c == '%' or c == '_' or c == '\\') {
+            try escaped_query.append('\\');
+        }
+        try escaped_query.append(c);
+    }
+    const search_pattern = try std.fmt.allocPrint(allocator, "%%{s}%%", .{escaped_query.items});
     defer allocator.free(search_pattern);
 
     const params = [_][]const u8{ search_pattern, search_pattern };
@@ -94,7 +102,7 @@ pub fn searchPosts(allocator: std.mem.Allocator, req: *http.Request, res: *http.
         \\       CASE WHEN ? THEN (SELECT COUNT(*) FROM bookmarks WHERE post_id = p.id AND user_id = ?) > 0 ELSE 0 END as is_bookmarked
         \\FROM posts p
         \\JOIN users u ON p.user_id = u.id
-        \\WHERE p.content LIKE ?
+        \\WHERE p.content LIKE ? ESCAPE '\'
         \\ORDER BY p.created_at DESC
         \\LIMIT 50
     ;
@@ -117,7 +125,15 @@ pub fn searchPosts(allocator: std.mem.Allocator, req: *http.Request, res: *http.
         is_bookmarked: bool,
     };
 
-    const search_pattern = try std.fmt.allocPrint(allocator, "%{s}%", .{query});
+    var escaped_query = std.ArrayList(u8).init(allocator);
+    defer escaped_query.deinit();
+    for (query) |c| {
+        if (c == '%' or c == '_' or c == '\\') {
+            try escaped_query.append('\\');
+        }
+        try escaped_query.append(c);
+    }
+    const search_pattern = try std.fmt.allocPrint(allocator, "%%{s}%%", .{escaped_query.items});
     defer allocator.free(search_pattern);
 
     const current_user_str = if (current_user_id) |id| try std.fmt.allocPrint(allocator, "{d}", .{id}) else "";

@@ -239,7 +239,9 @@ fn serveStaticFiles(allocator: std.mem.Allocator, req: *http.Request, res: *http
     defer allocator.free(public_dir_abs);
 
     // Ensure the resolved path is within the public directory
-    if (!std.mem.startsWith(u8, abs_path, public_dir_abs)) {
+    const public_dir_with_sep = try std.fmt.allocPrint(allocator, "{s}/", .{public_dir_abs});
+    defer allocator.free(public_dir_with_sep);
+    if (!std.mem.startsWith(u8, abs_path, public_dir_with_sep) and !std.mem.eql(u8, abs_path, public_dir_abs)) {
         res.status = 403;
         res.headers.put("Content-Type", "text/plain") catch {};
         try res.append("Forbidden");

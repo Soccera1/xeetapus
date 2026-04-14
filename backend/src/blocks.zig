@@ -2,6 +2,7 @@ const std = @import("std");
 const http = @import("http.zig");
 const db = @import("db.zig");
 const auth = @import("auth.zig");
+const json_utils = @import("json.zig");
 
 const UserIdRow = struct { id: i64 };
 const OwnerIdRow = struct { owner_id: i64 };
@@ -161,16 +162,24 @@ pub fn getBlockedUsers(allocator: std.mem.Allocator, req: *http.Request, res: *h
     try res.bodyWriter().print("{{\"blocked_users\":[", .{});
     for (rows, 0..) |row, i| {
         if (i > 0) try res.bodyWriter().print(",", .{});
+        const escaped_username = try json_utils.escapeJson(allocator, row.username);
+        defer allocator.free(escaped_username);
+        const escaped_created_at = try json_utils.escapeJson(allocator, row.created_at);
+        defer allocator.free(escaped_created_at);
         try res.bodyWriter().print("{{\"id\":{d},\"username\":\"{s}\"", .{
-            row.id, row.username,
+            row.id, escaped_username,
         });
         if (row.display_name) |name| {
-            try res.bodyWriter().print(",\"display_name\":\"{s}\"", .{name});
+            const escaped_display_name = try json_utils.escapeJson(allocator, name);
+            defer allocator.free(escaped_display_name);
+            try res.bodyWriter().print(",\"display_name\":\"{s}\"", .{escaped_display_name});
         }
         if (row.avatar_url) |url| {
-            try res.bodyWriter().print(",\"avatar_url\":\"{s}\"", .{url});
+            const escaped_avatar_url = try json_utils.escapeJson(allocator, url);
+            defer allocator.free(escaped_avatar_url);
+            try res.bodyWriter().print(",\"avatar_url\":\"{s}\"", .{escaped_avatar_url});
         }
-        try res.bodyWriter().print(",\"blocked_at\":\"{s}\"}}", .{row.created_at});
+        try res.bodyWriter().print(",\"blocked_at\":\"{s}\"}}", .{escaped_created_at});
     }
     try res.bodyWriter().print("]}}", .{});
 }
@@ -318,16 +327,24 @@ pub fn getMutedUsers(allocator: std.mem.Allocator, req: *http.Request, res: *htt
     try res.bodyWriter().print("{{\"muted_users\":[", .{});
     for (rows, 0..) |row, i| {
         if (i > 0) try res.bodyWriter().print(",", .{});
+        const escaped_username = try json_utils.escapeJson(allocator, row.username);
+        defer allocator.free(escaped_username);
+        const escaped_created_at = try json_utils.escapeJson(allocator, row.created_at);
+        defer allocator.free(escaped_created_at);
         try res.bodyWriter().print("{{\"id\":{d},\"username\":\"{s}\"", .{
-            row.id, row.username,
+            row.id, escaped_username,
         });
         if (row.display_name) |name| {
-            try res.bodyWriter().print(",\"display_name\":\"{s}\"", .{name});
+            const escaped_display_name = try json_utils.escapeJson(allocator, name);
+            defer allocator.free(escaped_display_name);
+            try res.bodyWriter().print(",\"display_name\":\"{s}\"", .{escaped_display_name});
         }
         if (row.avatar_url) |url| {
-            try res.bodyWriter().print(",\"avatar_url\":\"{s}\"", .{url});
+            const escaped_avatar_url = try json_utils.escapeJson(allocator, url);
+            defer allocator.free(escaped_avatar_url);
+            try res.bodyWriter().print(",\"avatar_url\":\"{s}\"", .{escaped_avatar_url});
         }
-        try res.bodyWriter().print(",\"muted_at\":\"{s}\"}}", .{row.created_at});
+        try res.bodyWriter().print(",\"muted_at\":\"{s}\"}}", .{escaped_created_at});
     }
     try res.bodyWriter().print("]}}", .{});
 }
