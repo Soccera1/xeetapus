@@ -1,0 +1,331 @@
+@node Getting Started
+@chapter Getting Started
+
+This chapter describes how to obtain the Xeetapus source code, install
+the necessary software, and run Xeetapus on your local machine for
+development or evaluation purposes.
+
+@menu
+* System Requirements::          What you need to run Xeetapus.
+* Obtaining the Source::         Downloading Xeetapus.
+* Installing Prerequisites::      Setting up required software.
+* Initial Configuration::        Preparing the environment files.
+* Building::                     Compiling Xeetapus.
+* Running::                       Starting the application.
+* Stopping::                     Halting the application.
+* Next Steps::                   Where to go from here.
+@end menu
+
+@node System Requirements
+@section System Requirements
+
+Before installing Xeetapus, ensure that your system meets the
+following requirements.
+
+@table @asis
+@item Operating System
+Xeetapus runs on Linux, macOS, and other Unix-like systems.  Windows
+users should use WSL2 (Windows Subsystem for Linux).
+
+@item Zig Compiler
+Version 0.14.0 or later.  The Zig compiler is available from
+@url{https://ziglang.org/}.
+
+@item SQLite
+Any recent version of SQLite3.  Most systems have this installed
+already.  The development libraries are required for building.
+
+@item Node.js
+Version 18 or later.  This is needed for the frontend build system.
+
+@item npm
+Version 9 or later.  This is typically included with Node.js.
+
+@item Just (optional)
+A command runner that simplifies common tasks.  Available from
+@url{https://github.com/casey/just}.  While optional, it is highly
+recommended for a smoother development experience.
+@end table
+
+@node Obtaining the Source
+@section Obtaining the Source
+
+If you have not already obtained the Xeetapus source code, clone the
+repository using Git:
+
+@example
+git clone <repository-url>
+cd xeetapus
+@end example
+
+Replace @code{<repository-url>} with the actual URL of the Xeetapus
+repository.  If you are reading this documentation as part of a
+local source tree, the repository is already available.
+
+After cloning, the directory structure should look something like this:
+
+@example
+xeetapus/
+├── backend/          # Zig backend source
+├── frontend/         # React frontend source
+├── deploy/           # Deployment scripts and configurations
+├── docs/             # Documentation
+└── justfile          # Task runner commands
+@end example
+
+@node Installing Prerequisites
+@subsection Installing Prerequisites
+
+The installation process differs depending on your operating system.
+The following subsections describe how to install the prerequisites
+on common systems.
+
+@subheading Debian/Ubuntu
+
+On Debian-based systems, use @command{apt} to install the required
+packages:
+
+@example
+sudo apt update
+sudo apt install sqlite3 libsqlite3-dev
+@end example
+
+To install Just (optional but recommended):
+
+@example
+cargo install just
+@end example
+
+Alternatively, Just may be available as a package:
+
+@example
+sudo apt install just
+@end example
+
+@subheading Arch Linux
+
+On Arch Linux, use @command{pacman}:
+
+@example
+sudo pacman -S sqlite just
+@end example
+
+@subheading macOS
+
+On macOS, use Homebrew:
+
+@example
+brew install sqlite just
+@end example
+
+Most macOS systems already have SQLite installed.
+
+@node Initial Configuration
+@section Initial Configuration
+
+Xeetapus uses environment variables for configuration.  Template files
+are provided for both the backend and frontend.
+
+@subheading Backend Configuration
+
+Change to the backend directory and copy the example environment file:
+
+@example
+cd backend
+cp .env.example .env
+@end example
+
+Open @file{backend/.env} in a text editor.  You must set values for
+the following required variables:
+
+@table @asis
+@item XEETAPUS_JWT_SECRET
+A secret key used for signing JWT tokens.  Generate one with:
+
+@example
+openssl rand -base64 64
+@end example
+
+@item XEETAPUS_CSRF_SECRET
+A secret key for CSRF token generation.  Generate one with:
+
+@example
+openssl rand -base64 32
+@end example
+@end table
+
+@quotation Warning
+Never use the example values from @file{.env.example} in production.
+Always generate new, random secrets as shown above.
+@end quotation
+
+@subheading Frontend Configuration
+
+In a separate terminal, configure the frontend:
+
+@example
+cd frontend
+cp .env.example .env
+@end example
+
+The default frontend configuration should work for local development.
+The frontend expects the backend API at @code{http://localhost:8080/api}.
+
+@node Building
+@section Building
+
+You may build Xeetapus using the Just task runner (recommended) or
+manually.
+
+@subsection Using Just (Recommended)
+
+From the project root directory:
+
+@example
+just build
+@end example
+
+This builds both the backend and frontend.  The backend binary will be
+located at @file{backend/zig-out/bin/xeetapus-backend}, and the
+frontend build output will be in @file{frontend/dist/}.
+
+@subsection Building Manually
+
+To build only the backend:
+
+@example
+cd backend
+zig build
+@end example
+
+To build only the frontend:
+
+@example
+cd frontend
+npm install
+npm run build
+@end example
+
+@node Running
+@section Running
+
+You may run Xeetapus in development mode (with hot reload for the
+frontend) or in production mode.
+
+@subsection Development Mode (Recommended)
+
+Development mode enables hot reload for the frontend, verbose logging,
+and relaxed CORS policies for local testing.
+
+Using Just:
+
+@example
+just dev
+@end example
+
+Running manually, you will need two terminal windows.  In the first
+terminal, start the backend:
+
+@example
+cd backend
+source .env && ./zig-out/bin/xeetapus-backend
+@end example
+
+In the second terminal, start the frontend:
+
+@example
+cd frontend
+npm run dev
+@end example
+
+@subsection Production Mode
+
+In production mode, the backend serves the compiled frontend static
+files.
+
+Using Just:
+
+@example
+just run
+@end example
+
+Or manually:
+
+@example
+cd backend
+source .env && ./zig-out/bin/xeetapus-backend
+@end example
+
+@subsection Accessing the Application
+
+Once running, access Xeetapus through your web browser:
+
+@table @asis
+@item Frontend
+@url{http://localhost:3000} (development) or
+@url{http://localhost:8080} (production)
+
+@item Backend API
+@url{http://localhost:8080/api}
+
+@item Health Check
+@url{http://localhost:8080/api/health}
+@end table
+
+The health check endpoint returns a JSON response indicating whether
+the service is operational:
+
+@example
+@{"status":"ok","service":"xeetapus"@}
+@end example
+
+@node Stopping
+@section Stopping
+
+To stop Xeetapus, you may use the Just task runner or terminate the
+processes manually.
+
+Using Just:
+
+@example
+just stop
+@end example
+
+This stops both the backend and frontend processes.
+
+To stop manually, find the process using the port and terminate it:
+
+@example
+lsof -ti:8080 | xargs kill
+@end example
+
+@node Next Steps
+@section Next Steps
+
+Now that you have Xeetapus running, you may wish to:
+
+@itemize @bullet
+@item
+Read @ref{System Architecture} to understand how Xeetapus works
+internally.
+
+@item
+Consult @ref{Configuration} to learn about all available
+configuration options.
+
+@item
+Study @ref{API Reference} if you intend to develop clients or
+integrations.
+
+@item
+Read @ref{Development Guide} if you wish to modify or extend
+Xeetapus.
+
+@item
+Proceed to @ref{Deployment Guide} when you are ready to deploy to a
+production server.
+@end itemize
+
+@cindex getting started
+@cindex installation
+@cindex prerequisites

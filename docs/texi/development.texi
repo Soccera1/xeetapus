@@ -1,0 +1,672 @@
+@node Development Guide
+@chapter Development Guide
+
+This chapter describes how to set up a development environment for
+Xeetapus, how to make changes to the code, and the conventions used
+throughout the project.
+
+@menu
+* Setting Up::                  Preparing your development environment.
+* Project Layout::              Directory structure overview.
+* Backend Development::         Working with the Zig backend.
+* Frontend Development::        Working with the React frontend.
+* Database Development::         Adding tables and queries.
+* Testing::                     Writing and running tests.
+* Code Quality::               Linting and formatting tools.
+* Git Workflow::                Branching and commit conventions.
+* Debugging::                  Finding and fixing problems.
+* Common Issues::              Solutions to frequent problems.
+@end menu
+
+@node Setting Up
+@section Setting Up
+
+Before you begin developing Xeetapus, you must install the required
+software and clone the repository.
+
+@xref{Getting Started}, for detailed instructions on obtaining the source
+code and installing prerequisites.  The following is a brief summary:
+
+@enumerate
+@item
+Install Zig 0.14.0 or later, SQLite, Node.js 18+, and npm 9+.
+
+@item
+Optionally install Just for simplified task management.
+
+@item
+Clone the repository.
+
+@item
+Install frontend dependencies: @code{cd frontend && npm install}
+
+@item
+Copy and configure environment files: @code{cp backend/.env.example backend/.env}
+@end enumerate
+
+Once set up, start the development server with:
+
+@example
+just dev
+@end example
+
+This starts both the backend and frontend with hot reload enabled.
+
+@node Project Layout
+@section Project Layout
+
+The project is organized into several directories:
+
+@table @asis
+@item backend/
+The Zig backend source code.  This directory contains the HTTP server,
+API handlers, database layer, and security implementation.
+
+@table @asis
+@item backend/src/
+Zig source files organized by functionality.  Each module is typically
+contained in a single file.
+
+@item backend/zig-out/
+Build output directory.  Contains compiled binaries.
+
+@item backend/.env
+Environment configuration.  Should not be committed to version control.
+@end table
+
+@item frontend/
+The React frontend source code.  Contains the single-page application
+that provides the user interface.
+
+@table @asis
+@item frontend/src/
+TypeScript and React source files.
+
+@item frontend/src/components/
+Reusable UI components.
+
+@item frontend/src/pages/
+Page components corresponding to application routes.
+
+@item frontend/src/context/
+React context providers for global state.
+
+@item frontend/dist/
+Production build output.
+
+@item frontend/public/
+Static assets served as-is.
+@end table
+
+@item deploy/
+Deployment-related files including nginx configurations and init scripts.
+
+@item docs/
+Documentation in Markdown and Texinfo formats.
+@end table
+
+@node Backend Development
+@section Backend Development
+
+The backend is written in Zig, a systems programming language that
+provides fine-grained control over memory without garbage collection.
+
+@subheading Zig Style Guide
+
+Follow these conventions when writing Zig code:
+
+@table @asis
+@item Naming
+Use @code{lowercase} for functions and variables.  Use @code{PascalCase}
+for types.  Use @code{UPPER_SNAKE_CASE} for constants.
+
+@item Error Handling
+Use error unions (@code{!}) for functions that can fail.  Use @code{try}
+to propagate errors.  Use @code{catch} to handle errors with default
+values.
+
+@item Memory
+Use arena allocators for temporary allocations.  Always free memory
+when done, or use defer statements.
+
+@item Formatting
+Run @code{zig fmt} before committing.  This formats code according to
+Zig's standard style.
+@end table
+
+@subheading Adding a New Module
+
+To add a new feature to the backend:
+
+@enumerate
+@item
+Create a new source file in @file{backend/src/}, for example
+@file{mymodule.zig}.
+
+@item
+Define your module's types and functions:
+
+@verbatim
+const std = @import("std");
+
+pub fn handler(
+    allocator: std.mem.Allocator,
+    req: *http.Request,
+    res: *http.Response,
+) !void {
+    // Implementation here
+}
+@end verbatim
+
+@item
+Register the module in @file{backend/src/main.zig}:
+
+@verbatim
+const mymodule = @import("mymodule.zig");
+
+// In main(), after creating the server:
+try server.addRoute("GET", "/api/mymodule", mymodule.handler);
+@end verbatim
+
+@item
+Add any required database tables by modifying the migrations in
+@file{backend/src/db.zig}.
+@end enumerate
+
+@subheading Running Tests
+
+The backend includes unit tests.  Run them with:
+
+@example
+cd backend
+zig build test
+@end example
+
+@subheading Debugging
+
+Use the built-in logging functions to debug:
+
+@verbatim
+std.log.debug("Variable value: @{s@}", .@{variable@});
+std.log.info("Processing request", .@{});
+std.log.warn("Rate limit approaching for IP: @{s@}", .@{ip@});
+std.log.err("Failed to connect: @{}", .@{err@});
+@end verbatim
+
+These logs appear in the terminal when running in development mode.
+
+@node Frontend Development
+@section Frontend Development
+
+The frontend is a React application built with TypeScript and Vite.
+
+@subheading Component Conventions
+
+Follow these conventions when writing React components:
+
+@table @asis
+@item Naming
+Use @code{PascalCase} for component names.  Use @code{camelCase} for
+functions and variables.  Use @code{UPPER_SNAKE_CASE} for constants.
+
+@item Components
+Use functional components with hooks rather than class components:
+
+@verbatim
+const MyComponent: React.FC<MyComponentProps> = (@{ prop @}) => {
+    const [state, setState] = useState(initialState);
+    
+    return (
+        <div className="my-component">
+            @{prop@}
+        </div>
+    );
+};
+@end verbatim
+
+@item Types
+Define prop types in an interface:
+
+@verbatim
+interface MyComponentProps {
+    title: string;
+    onClick?: () => void;
+}
+@end verbatim
+@end table
+
+@subheading Adding a New Page
+
+To add a new page to the application:
+
+@enumerate
+@item
+Create a new file in @file{frontend/src/pages/}, for example
+@file{NewPage.tsx}:
+
+@verbatim
+import React from 'react';
+
+const NewPage: React.FC = () => {
+    return (
+        <div>
+            <h1>New Page</h1>
+        </div>
+    );
+};
+
+export default NewPage;
+@end verbatim
+
+@item
+Import and add the route in @file{frontend/src/App.tsx}:
+
+@verbatim
+import NewPage from './pages/NewPage';
+
+// Inside the Routes component:
+<Route path="/newpage" element={
+    <PrivateRoute><NewPage /></PrivateRoute>
+} />
+@end verbatim
+@end enumerate
+
+@subheading Adding a New Component
+
+Create reusable components in @file{frontend/src/components/}:
+
+@verbatim
+interface MyComponentProps {
+    title: string;
+    onClick?: () => void;
+}
+
+const MyComponent: React.FC<MyComponentProps> = (@{ title, onClick @}) => {
+    return (
+        <button onClick=@{onClick@} className="my-component">
+            @{title@}
+        </button>
+    );
+};
+
+export default MyComponent;
+@end verbatim
+
+@subheading Using the API Client
+
+The centralized API client is available at @file{frontend/src/api.ts}.
+Import and use it for all API calls:
+
+@verbatim
+import api from './api';
+
+// GET request
+const response = await api.get('/api/posts');
+const posts = await response.json();
+
+// POST request
+const response = await api.post('/api/posts', @{
+    content: 'Hello, world!'
+@});
+
+// Error handling
+try @{
+    const response = await api.get('/api/posts');
+    if (!response.ok) @{
+        throw new Error('Failed to fetch posts');
+    @}
+    const posts = await response.json();
+@} catch (error) @{
+    console.error('Error:', error);
+@}
+@end verbatim
+
+@subheading Running Tests
+
+Frontend tests use Vitest and React Testing Library:
+
+@example
+cd frontend
+npm run test
+@end example
+
+Run tests in watch mode:
+
+@example
+npm run test -- --watch
+@end example
+
+@node Database Development
+@section Database Development
+
+The database schema is defined in @file{backend/src/db.zig}.  All
+modifications to the schema must be reflected in this file.
+
+@subheading Adding a Table
+
+To add a new database table:
+
+@enumerate
+@item
+Add a migration statement to the @code{migrations} array in
+@file{backend/src/db.zig}:
+
+@verbatim
+const migrations = [_][]const u8@{
+    // ... existing migrations ...
+    \\CREATE TABLE IF NOT EXISTS new_table (
+    \\    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    \\    name TEXT NOT NULL,
+    \\    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    \\);
+@};
+@end verbatim
+
+@item
+If you need to reference the table from other modules, add a struct
+definition in the appropriate module:
+
+@verbatim
+const NewTable = struct @{
+    id: i64,
+    name: []const u8,
+    created_at: []const u8,
+@};
+@end verbatim
+@end enumerate
+
+@subheading Writing Queries
+
+Always use parameterized queries to prevent SQL injection:
+
+@verbatim
+// Correct
+const rows = try db.query("SELECT * FROM users WHERE username = ?",
+    &[_][]const u8@{username@});
+@end verbatim
+
+@quotation Warning
+Never concatenate user input directly into SQL strings.  This creates
+a SQL injection vulnerability.
+@end quotation
+
+@subheading Inspecting the Database
+
+Use the SQLite command-line tool to inspect the database during
+development:
+
+@example
+sqlite3 backend/xeetapus.db
+@end example
+
+Useful commands:
+
+@example
+.tables
+.schema users
+SELECT * FROM users LIMIT 5;
+.quit
+@end example
+
+@node Testing
+@section Testing
+
+Testing ensures that code works correctly and helps prevent regressions
+when making changes.
+
+@subheading Backend Tests
+
+Zig includes a built-in testing framework.  Tests are defined using the
+@code{test} keyword:
+
+@verbatim
+const mymodule = @import("mymodule.zig");
+
+test "my function works correctly" @{
+    const result = try mymodule.myFunction();
+    try testing.expectEqual(expected, result);
+@}
+@end verbatim
+
+Run all backend tests:
+
+@example
+cd backend
+zig build test
+@end example
+
+@subheading Frontend Tests
+
+Frontend tests use Vitest with React Testing Library.  Tests are placed
+alongside the files they test:
+
+@example
+MyComponent.test.tsx
+@end example
+
+Example test:
+
+@verbatim
+import @{ render, screen @} from '@@testing-library/react';
+import MyComponent from './MyComponent';
+
+describe('MyComponent', () => @{
+    it('renders correctly', () => @{
+        render(<MyComponent title="Test" />);
+        expect(screen.getByText('Test')).toBeInTheDocument();
+    @});
+@});
+@end verbatim
+
+Run frontend tests:
+
+@example
+cd frontend
+npm run test
+@end example
+
+Run with coverage:
+
+@example
+npm run test:coverage
+@end example
+
+@node Code Quality
+@section Code Quality
+
+Maintaining consistent code quality helps the project remain readable
+and maintainable.
+
+@subsection Frontend Linting
+
+The frontend uses ESLint for static analysis:
+
+@example
+cd frontend
+npm run lint
+@end example
+
+@subsection Type Checking
+
+TypeScript provides compile-time type checking.  Build commands include
+type checking:
+
+@example
+cd frontend
+npm run build
+@end example
+
+@subsection Formatting
+
+Format code before committing to maintain consistency:
+
+@example
+cd backend
+zig fmt src/
+@end example
+
+@node Git Workflow
+@section Git Workflow
+
+Follow these conventions when contributing to the project.
+
+@subheading Branch Naming
+
+Use descriptive branch names with prefixes:
+
+@table @asis
+@item feature/name
+New features.
+
+@item fix/description
+Bug fixes.
+
+@item docs/description
+Documentation updates.
+
+@item refactor/description
+Code refactoring without behavior changes.
+@end table
+
+Example:
+
+@example
+git checkout -b feature/user-blocking
+@end example
+
+@subheading Commit Messages
+
+Write clear, concise commit messages that explain @emph{why} a change was
+made, not just @emph{what} changed.  Use the imperative mood:
+
+@example
+feat: add user blocking feature
+fix: resolve authentication token expiry bug
+docs: update API documentation
+refactor: simplify password hashing logic
+test: add unit tests for validation module
+@end example
+
+@node Debugging
+@section Debugging
+
+This section covers techniques for finding and fixing problems.
+
+@subheading Backend Debugging
+
+Add debug output to trace execution:
+
+@verbatim
+std.log.debug("Processing: @{s@}", .@{input@});
+std.log.debug("Result: @{}", .@{result@});
+@end verbatim
+
+Use structured error handling to get detailed error information:
+
+@verbatim
+if (result) |value| @{
+    std.log.debug("Success: @{}", .@{value@});
+@} else |err| @{
+    std.log.err("Error: @{}", .@{err@});
+@}
+@end verbatim
+
+@subheading Frontend Debugging
+
+Use the browser's developer tools:
+
+@itemize @bullet
+@item
+Open the console to view logs and errors.
+
+@item
+Use the debugger statement to pause execution.
+
+@item
+Use React DevTools to inspect component state and props.
+
+@item
+Use the Network tab to inspect API requests and responses.
+@end itemize
+
+@subheading Database Debugging
+
+Enable query logging by running:
+
+@example
+sqlite3 backend/xeetapus.db "PRAGMA query_only = OFF;"
+@end example
+
+Use @code{.schema} to inspect table structure:
+
+@example
+.schema users
+@end example
+
+View recent entries:
+
+@example
+SELECT * FROM users ORDER BY created_at DESC LIMIT 10;
+@end example
+
+@node Common Issues
+@section Common Issues
+
+This section addresses frequently encountered problems.
+
+@subsection Port Already in Use
+
+If the backend fails to start with an address already in use error:
+
+@example
+lsof -ti:8080 | xargs kill
+@end example
+
+Or simply:
+
+@example
+just stop
+@end example
+
+@subsection Build Errors
+
+Clean and rebuild from scratch:
+
+@example
+just clean
+just build
+@end example
+
+For the frontend specifically:
+
+@example
+rm -rf frontend/node_modules frontend/package-lock.json
+cd frontend && npm install
+@end example
+
+@subsection Database Locked
+
+SQLite may report that the database is locked if multiple processes try
+to write simultaneously.  Ensure only one backend process is running:
+
+@example
+just stop
+@end example
+
+If the lock persists, remove the WAL files:
+
+@example
+rm backend/xeetapus.db-wal backend/xeetapus.db-shm 2>/dev/null
+@end example
+
+@subsection Missing Dependencies
+
+If you encounter missing module errors:
+
+@example
+cd frontend && npm install
+@end example
+
+@cindex development
+@cindex debugging
+@cindex testing

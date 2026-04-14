@@ -1,0 +1,722 @@
+@node Deployment Guide
+@chapter Deployment Guide
+
+This chapter describes how to deploy Xeetapus to a production server.
+Following these instructions will result in a secure, reliable
+installation suitable for serving real users.
+
+@menu
+* Prerequisites::               Server requirements and software.
+* Building for Production::       Compiling release binaries.
+* Server Setup::                 Preparing the server environment.
+* Reverse Proxy::                Configuring nginx.
+* TLS Certificates::             Setting up HTTPS.
+* Service Management::           Running Xeetapus as a system service.
+* Database Management::           Backup and maintenance.
+* Monitoring::                  Health checks and logging.
+* Backup Strategy::              Automated backup procedures.
+* Upgrading::                    Updating to new versions.
+* Troubleshooting::              Solving common deployment problems.
+@end menu
+
+@node Prerequisites
+@section Prerequisites
+
+Before deploying Xeetapus, ensure your server meets the requirements.
+
+@subheading Server Requirements
+
+@table @asis
+@item CPU
+One core is sufficient for moderate traffic.  Two or more cores are
+recommended for better performance.
+
+@item Memory
+512 MB is the minimum; 1 GB or more is recommended for smooth operation.
+
+@item Storage
+At least 1 GB for the application and database.  Plan additional space
+for media uploads and backups.
+
+@item Operating System
+Linux is recommended.  Ubuntu 22.04 LTS or Debian 12 are good choices.
+Other distributions will work but have not been tested.
+@end table
+
+@subheading Required Software
+
+@table @asis
+@item SQLite
+Pre-installed on most Linux distributions.  The development libraries may
+be needed for certain build configurations.
+
+@item Nginx
+A reverse proxy and web server.  Other proxies such as Caddy may be used
+but this guide covers nginx specifically.
+
+@item TLS Certificate
+A valid SSL/TLS certificate is required for HTTPS.  Let's Encrypt
+provides free certificates.
+
+@item Init System
+systemd (most Linux distributions) or OpenRC (Gentoo, Alpine).  The
+appropriate init script is included with Xeetapus.
+@end table
+
+@node Building for Production
+@section Building for Production
+
+Before deploying, you must build optimized release versions of both the
+backend and frontend.
+
+@subheading Building the Backend
+
+The backend should be built with optimizations enabled:
+
+@example
+cd backend
+zig build -Doptimize=ReleaseFast
+@end example
+
+This produces a smaller, faster binary at
+@file{backend/zig-out/bin/xeetapus-backend}.
+
+@subheading Building the Frontend
+
+Install dependencies and build the production bundle:
+
+@example
+cd frontend
+npm install
+npm run build
+@end example
+
+The production build is placed in @file{frontend/dist/}.
+
+@subheading Using Just
+
+The Just task runner automates the build process:
+
+@example
+just build
+@end example
+
+This builds both components in sequence.
+
+@node Server Setup
+@section Server Setup
+
+This section describes how to prepare the server environment.
+
+@subheading Creating Directories
+
+Create the directory structure for the installation:
+
+@example
+sudo mkdir -p /var/www/xeetapus
+sudo mkdir -p /var/www/xeetapus/media
+sudo mkdir -p /var/log
+sudo mkdir -p /var/backups
+@end example
+
+@subheading Setting Permissions
+
+Create a dedicated user for Xeetapus (if one does not exist) and set
+ownership:
+
+@example
+sudo chown -R xeetapus:xeetapus /var/www/xeetapus
+sudo touch /var/log/xeetapus.log
+sudo chown xeetapus:xeetapus /var/log/xeetapus.log
+@end example
+
+@subheading Deploying Files
+
+Copy the built files to the deployment location:
+
+@example
+sudo cp backend/zig-out/bin/xeetapus-backend /var/www/xeetapus/
+sudo cp -r frontend/dist /var/www/xeetapus/
+sudo cp backend/.env /var/www/xeetapus/
+@end example
+
+Set appropriate permissions:
+
+@example
+sudo chmod 750 /var/www/xeetapus
+sudo chmod 600 /var/www/xeetapus/.env
+@end example
+
+@subheading Production Environment
+
+Edit the @file{/var/www/xeetapus/.env} file with production settings:
+
+@table @asis
+@item XEETAPUS_ENV
+Set to @code{production}.
+
+@item XEETAPUS_DB_PATH
+Set to the absolute path of the database, for example
+@code{/var/www/xeetapus/xeetapus.db}.
+
+@item XEETAPUS_MEDIA_PATH
+Set to the absolute path of the media directory,
+@code{/var/www/xeetapus/media}.
+
+@item XEETAPUS_ALLOWED_ORIGINS
+Set to your production domain(s), for example
+@code{https://example.com}.
+
+@item XEETAPUS_JWT_SECRET
+@vindex XEETAPUS_JWT_SECRET
+Must be set to a strong, random value.  Generate one with:
+@example
+openssl rand -base64 64
+@end example
+
+@item XEETAPUS_CSRF_SECRET
+@vindex XEETAPUS_CSRF_SECRET
+Must be set to a strong, random value.  Generate one with:
+@example
+openssl rand -base64 32
+@end example
+@end table
+
+@node Reverse Proxy
+@section Reverse Proxy
+
+A reverse proxy handles incoming HTTP connections, provides TLS
+termination, and forwards requests to the Xeetapus backend.
+
+@subheading Installing Nginx
+
+@example
+sudo apt install nginx
+@end example
+
+@subheading Configuration
+
+Create the nginx configuration at
+@file{/etc/nginx/sites-available/xeetapus}:
+
+@verbatim
+server {
+    listen 80;
+    listen [::]:80;
+    server_name example.com;
+
+    # Redirect HTTP to HTTPS
+    return 301 https://$server_name$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name example.com;
+
+    # SSL Configuration
+    ssl_certificate /etc/letsencrypt/live/example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/example.com/privkey.pem;
+    ssl_session_timeout 1d;
+    ssl_session_cache shared:SSL:50m;
+    ssl_session_tickets off;
+
+    # Modern SSL Configuration
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384;
+    ssl_prefer_server_ciphers off;
+
+    # Security Headers
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
+    add_header X-Frame-Options "DENY" always;
+    add_header X-Content-Type-Options "nosniff" always;
+
+    # Upload Size Limit
+    client_max_body_size 10M;
+
+    # API Proxy
+    location /api {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 90s;
+    }
+
+    # Media Proxy
+    location /media {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+
+    # Frontend Proxy
+    location / {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+@end verbatim
+
+@subheading Enabling the Site
+
+@example
+sudo ln -s /etc/nginx/sites-available/xeetapus /etc/nginx/sites-enabled/
+sudo nginx -t
+sudo systemctl reload nginx
+@end example
+
+@node TLS Certificates
+@section TLS Certificates
+
+HTTPS is required for secure operation.  This section describes how to
+obtain certificates using Let's Encrypt.
+
+@subheading Installing Certbot
+
+@example
+sudo apt install certbot python3-certbot-nginx
+@end example
+
+@subheading Obtaining a Certificate
+
+@example
+sudo certbot --nginx -d example.com -d www.example.com
+@end example
+
+Follow the prompts to complete the process.
+
+@subheading Auto-Renewal
+
+Let's Encrypt certificates expire after 90 days.  Certbot sets up an
+automatic renewal timer:
+
+@example
+sudo systemctl enable certbot.timer
+sudo systemctl start certbot.timer
+@end example
+
+@subheading Manual Certificates
+
+If you have certificates from another provider, place them in a secure
+location:
+
+@example
+sudo mkdir -p /etc/nginx/ssl
+sudo cp your-cert.pem /etc/nginx/ssl/
+sudo cp your-key.pem /etc/nginx/ssl/
+sudo chmod 600 /etc/nginx/ssl/your-key.pem
+@end example
+
+Then update the nginx configuration to reference these files.
+
+@node Service Management
+@section Service Management
+
+Run Xeetapus as a system service so it starts automatically and can be
+managed with standard commands.
+
+@subheading systemd (Most Linux Distributions)
+
+Create a systemd service file at
+@file{/etc/systemd/system/xeetapus.service}:
+
+@verbatim
+[Unit]
+Description=Xeetapus Social Media Platform
+After=network.target
+
+[Service]
+Type=simple
+User=xeetapus
+Group=xeetapus
+WorkingDirectory=/var/www/xeetapus
+EnvironmentFile=/var/www/xeetapus/.env
+ExecStart=/var/www/xeetapus/xeetapus-backend
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+@end verbatim
+
+Then enable and start the service:
+
+@example
+sudo systemctl daemon-reload
+sudo systemctl enable xeetapus
+sudo systemctl start xeetapus
+@end example
+
+@subheading OpenRC (Gentoo, Alpine Linux)
+
+Install the provided init script:
+
+@example
+sudo cp deploy/openrc/xeetapus /etc/init.d/xeetapus
+sudo chmod +x /etc/init.d/xeetapus
+@end example
+
+Create the configuration file at @file{/etc/conf.d/xeetapus}:
+
+@verbatim
+XEETAPUS_USER=xeetapus
+XEETAPUS_GROUP=xeetapus
+XEETAPUS_DIR=/var/www/xeetapus
+XEETAPUS_LOG=/var/log/xeetapus.log
+@end verbatim
+
+Manage the service:
+
+@example
+sudo rc-update add xeetapus default
+sudo rc-service xeetapus start
+@end example
+
+@subheading Managing the Service
+
+Common service management commands:
+
+@example
+sudo systemctl start xeetapus    # Start the service
+sudo systemctl stop xeetapus     # Stop the service
+sudo systemctl restart xeetapus  # Restart the service
+sudo systemctl status xeetapus   # Check status
+sudo journalctl -u xeetapus      # View logs
+@end example
+
+@node Database Management
+@section Database Management
+
+The database requires regular maintenance to ensure performance and
+reliability.
+
+@subheading Backup
+
+Create a backup before making any significant changes:
+
+@example
+sqlite3 /var/www/xeetapus/xeetapus.db ".backup '/var/backups/xeetapus-$(date +\%Y\%m\%d).db'"
+@end example
+
+Or simply copy the file (ensure the server is stopped first):
+
+@example
+cp /var/www/xeetapus/xeetapus.db /var/backups/xeetapus.db
+@end example
+
+@subheading Restore
+
+To restore from a backup:
+
+@enumerate
+@item
+Stop the service:
+@example
+sudo systemctl stop xeetapus
+@end example
+
+@item
+Replace the database file:
+@example
+cp /var/backups/xeetapus-20240115.db /var/www/xeetapus/xeetapus.db
+@end example
+
+@item
+Restart the service:
+@example
+sudo systemctl start xeetapus
+@end example
+@end enumerate
+
+@subheading Maintenance
+
+Periodically optimize the database:
+
+@example
+sqlite3 /var/www/xeetapus/xeetapus.db "VACUUM;"
+@end example
+
+Check for corruption:
+
+@example
+sqlite3 /var/www/xeetapus/xeetapus.db "PRAGMA integrity_check;"
+@end example
+
+Update query planner statistics:
+
+@example
+sqlite3 /var/www/xeetapus/xeetapus.db "ANALYZE;"
+@end example
+
+@node Monitoring
+@section Monitoring
+
+Monitoring helps you identify problems before they affect users.
+
+@subheading Health Check
+
+The API provides a health check endpoint:
+
+@example
+curl https://example.com/api/health
+@end example
+
+A healthy service returns:
+
+@example
+@{"status":"ok","service":"xeetapus"@}
+@end example
+
+Create a monitoring script at @file{/usr/local/bin/xeetapus-health}:
+
+@verbatim
+#!/bin/bash
+ENDPOINT="http://localhost:8080/api/health"
+
+if curl -sf "$ENDPOINT" > /dev/null; then
+    echo "Xeetapus is healthy"
+    exit 0
+else
+    echo "Xeetapus is unhealthy"
+    exit 1
+fi
+@end verbatim
+
+@subheading Log Files
+
+Application logs are written to @file{/var/log/xeetapus.log}.  Check
+this file when troubleshooting issues:
+
+@example
+sudo tail -f /var/log/xeetapus.log
+@end example
+
+@subheading Log Rotation
+
+Configure log rotation to prevent disk space issues.  Create
+@file{/etc/logrotate.d/xeetapus}:
+
+@verbatim
+/var/log/xeetapus.log @{
+    daily
+    rotate 14
+    compress
+    delaycompress
+    notifempty
+    create 0640 xeetapus xeetapus
+    missingok
+@}
+@end verbatim
+
+@subheading Resource Monitoring
+
+Monitor CPU and memory usage:
+
+@example
+top -p $(pgrep xeetapus-backend)
+@end example
+
+Check disk usage:
+
+@example
+df -h /var/www/xeetapus
+@end example
+
+@node Backup Strategy
+@section Backup Strategy
+
+A robust backup strategy protects against data loss.
+
+@subheading Automated Backup Script
+
+Create a backup script at @file{/usr/local/bin/xeetapus-backup}:
+
+@verbatim
+#!/bin/bash
+DATE=$(date +%Y%m%d_%H%M%S)
+BACKUP_DIR="/var/backups/xeetapus"
+SOURCE_DIR="/var/www/xeetapus"
+
+mkdir -p "$BACKUP_DIR"
+
+# Backup database
+sqlite3 "$SOURCE_DIR/xeetapus.db" ".backup '$BACKUP_DIR/db_$DATE.db'"
+
+# Backup configuration (without secrets)
+cp "$SOURCE_DIR/.env" "$BACKUP_DIR/env_$DATE"
+
+# Backup media files
+tar -czf "$BACKUP_DIR/media_$DATE.tar.gz" -C "$SOURCE_DIR" media/
+
+# Remove backups older than 30 days
+find "$BACKUP_DIR" -type f -mtime +30 -delete
+
+echo "Backup completed: $DATE"
+@end verbatim
+
+Make the script executable:
+
+@example
+sudo chmod +x /usr/local/bin/xeetapus-backup
+@end example
+
+@subheading Cron Schedule
+
+Add a cron job to run backups daily:
+
+@example
+sudo crontab -e
+@end example
+
+Add this line:
+
+@example
+0 2 * * * /usr/local/bin/xeetapus-backup
+@end example
+
+This runs backups at 2:00 AM daily.
+
+@node Upgrading
+@section Upgrading
+
+To update Xeetapus to a new version:
+
+@enumerate
+@item
+Create a full backup:
+@example
+/usr/local/bin/xeetapus-backup
+@end example
+
+@item
+Stop the service:
+@example
+sudo systemctl stop xeetapus
+@end example
+
+@item
+Update the source code:
+@example
+git pull origin main
+@end example
+
+@item
+Rebuild:
+@example
+just build
+@end example
+
+@item
+Deploy the new binary:
+@example
+sudo cp backend/zig-out/bin/xeetapus-backend /var/www/xeetapus/
+sudo cp -r frontend/dist/* /var/www/xeetapus/
+@end example
+
+@item
+Check for database migrations.  Migrations are applied automatically
+on startup, but review the release notes for any manual steps.
+
+@item
+Start the service:
+@example
+sudo systemctl start xeetapus
+@end example
+
+@item
+Verify the deployment:
+@example
+curl https://example.com/api/health
+@end example
+@end enumerate
+
+@node Troubleshooting
+@section Troubleshooting
+
+This section addresses common deployment issues.
+
+@subsection Service Fails to Start
+
+Check the logs for error messages:
+
+@example
+sudo journalctl -u xeetapus -n 50
+@end example
+
+Verify the configuration file is readable:
+
+@example
+sudo -u xeetapus cat /var/www/xeetapus/.env
+@end example
+
+Test the binary manually:
+
+@example
+sudo -u xeetapus /var/www/xeetapus/xeetapus-backend
+@end example
+
+@subsection Database Errors
+
+Check database integrity:
+
+@example
+sqlite3 /var/www/xeetapus/xeetapus.db "PRAGMA integrity_check;"
+@end example
+
+If corruption is detected, recover data:
+
+@example
+sqlite3 /var/www/xeetapus/xeetapus.db ".recover" > /tmp/recovered.sql
+sqlite3 /var/www/xeetapus/xeetapus_new.db < /tmp/recovered.sql
+@end example
+
+@subsection Connection Refused
+
+Verify the backend is listening:
+
+@example
+sudo netstat -tlnp | grep 8080
+@end example
+
+Check if the service is running:
+
+@example
+sudo systemctl status xeetapus
+@end example
+
+Test the API directly:
+
+@example
+curl http://localhost:8080/api/health
+@end example
+
+@subsection Performance Issues
+
+Check resource usage:
+
+@example
+top -p $(pgrep xeetapus-backend)
+@end example
+
+Optimize the database:
+
+@example
+sqlite3 /var/www/xeetapus/xeetapus.db "VACUUM;"
+@end example
+
+Review logs for errors:
+
+@example
+sudo tail -100 /var/log/xeetapus.log
+@end example
+
+@cindex deployment
+@cindex production
+@cindex nginx
+@cindex backup

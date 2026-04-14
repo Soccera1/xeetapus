@@ -1,0 +1,457 @@
+@node System Architecture
+@chapter System Architecture
+
+This chapter describes the internal architecture of Xeetapus, including
+the organization of the backend and frontend components, the data flow
+through the system, and the rationale behind key design decisions.
+
+@menu
+* High-Level Overview::           System components at a glance.
+* Backend Structure::             Backend modules and their responsibilities.
+* HTTP Server::                  How the HTTP server is implemented.
+* Database Layer::               Database abstraction and migrations.
+* Frontend Structure::           Frontend components and state management.
+* Data Flow::                    How requests travel through the system.
+* Security Architecture::         Security components and their interactions.
+* Performance Considerations::    Optimization strategies and limitations.
+* Design Rationale::             Why certain technologies were chosen.
+@end menu
+
+@node High-Level Overview
+@section High-Level Overview
+
+Xeetapus follows a traditional client-server architecture.  The client
+is a single-page application written in React, while the server is a
+custom HTTP server written in Zig.  The two communicate exclusively
+through a RESTful JSON API.
+
+The system consists of three main layers:
+
+@enumerate
+@item
+The frontend, which runs in the user's web browser and provides the
+user interface.
+
+@item
+The backend HTTP server, which handles client requests, enforces
+security policies, and manages application logic.
+
+@item
+The database, which provides persistent storage for all application
+data.
+@end enumerate
+
+The following diagram illustrates the high-level architecture:
+
+@verbatim
+┌─────────────────────────────────────────────────────────────┐
+│                        User Browser                           │
+│  ┌─────────────────────────────────────────────────────┐    │
+│  │               React Frontend (Port 3000)             │    │
+│  │  ┌───────────┐ ┌──────────┐ ┌────────────────────┐ │    │
+│  │  │Components │ │  Pages   │ │   API Client       │ │    │
+│  │  └───────────┘ └──────────┘ └────────────────────┘ │    │
+│  └─────────────────────────────────────────────────────┘    │
+└──────────────────────────┬──────────────────────────────────┘
+                           │ HTTP/REST
+                           ▼
+┌─────────────────────────────────────────────────────────────┐
+│                    Zig Backend (Port 8080)                    │
+│  ┌─────────────┐ ┌───────────┐ ┌─────────────────────────┐  │
+│  │HTTP Server │ │ Middleware│ │     Route Handlers      │  │
+│  └─────────────┘ └───────────┘ └─────────────────────────┘  │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │     Posts      Users    Timeline    Auth   ...      │   │
+│  └─────────────────────────────────────────────────────┘   │
+│  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────────────┐   │
+│  │ Config  │ │Database │ │Security │ │   Validation    │   │
+│  └─────────┘ └─────────┘ └─────────┘ └─────────────────┘   │
+└──────────────────────────┬──────────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────┐
+│                  SQLite Database                              │
+└─────────────────────────────────────────────────────────────┘
+@end verbatim
+
+Each layer has clearly defined responsibilities and communicates with
+adjacent layers through well-defined interfaces.
+
+@node Backend Structure
+@section Backend Structure
+
+The backend is organized as a collection of Zig source modules, each
+responsible for a specific area of functionality.
+
+@table @asis
+@item main.zig
+The application entry point.  This module initializes configuration,
+sets up the database, registers routes, and starts the HTTP server.
+
+@item http.zig
+The HTTP server implementation.  This module handles TCP connections,
+parses HTTP requests, and manages routing.
+
+@item config.zig
+Configuration management.  Reads environment variables and provides
+typed access to configuration values throughout the application.
+
+@item db.zig
+Database abstraction.  Manages the SQLite connection, executes queries,
+and handles schema migrations.
+
+@item auth.zig
+Authentication logic.  Handles user registration, login, logout, and
+session management.
+
+@item security.zig
+Security-related functionality.  Exports security utilities from other
+modules for convenience.
+
+@item password.zig
+Password hashing using PBKDF2.  Provides secure password hashing and
+verification.
+
+@item tokens.zig
+JWT token generation and validation.  Creates signed tokens containing
+user session information.
+
+@item ratelimit.zig
+Rate limiting implementation.  Tracks request counts per IP address
+and enforces configurable limits.
+
+@item validation.zig
+Input validation and sanitization.  Validates user input according to
+defined rules and sanitizes data to prevent injection attacks.
+
+@item audit.zig
+Security audit logging.  Records security-relevant events such as
+login attempts and administrative actions.
+
+@item posts.zig, users.zig, timeline.zig, etc.
+Domain-specific route handlers for posts, users, timeline, and other
+application features.
+@end table
+
+@node HTTP Server
+@subsection HTTP Server
+
+The HTTP server is implemented from scratch in Zig rather than using an
+existing framework.  This provides several advantages:
+
+@itemize @bullet
+@item
+No external dependencies beyond the Zig standard library.
+
+@item
+Small binary size, suitable for constrained environments.
+
+@item
+Full control over request handling semantics.
+@end itemize
+
+The server supports several categories of routes:
+
+@table @asis
+@item Public routes
+Accessible without authentication.  These include health checks and
+public profile data.
+
+@item Protected routes
+Require a valid session cookie.  The server validates the JWT token
+before invoking the handler.
+
+@item Parameterized routes
+Include variable segments such as @code{:id} or @code{:username}.
+The server extracts these values and passes them to handlers.
+@end table
+
+@node Database Layer
+@subsection Database Layer
+
+The database layer abstracts SQLite operations behind a simple interface.
+It handles connection management, query execution, and schema
+migrations.
+
+SQLite was chosen for its simplicity and zero-configuration operation.
+The database file is stored on disk and can be backed up using
+standard file tools.  Migrations are applied automatically on startup.
+
+@node Frontend Structure
+@section Frontend Structure
+
+The frontend is a React single-page application built with Vite.  It is
+organized into several directories:
+
+@table @asis
+@item src/components/
+Reusable user interface components.  The @file{ui/} subdirectory
+contains primitive components from Radix UI.
+
+@item src/pages/
+Route components that correspond to application pages.  Each page
+handles a specific URL path.
+
+@item src/context/
+React context providers for global state, particularly authentication
+state.
+
+@item src/api.ts
+The centralized API client that handles all communication with the
+backend.
+
+@item src/types.ts
+TypeScript type definitions for API requests and responses.
+@end table
+
+State management uses React's built-in mechanisms: @code{useState}
+for local component state, context providers for shared state, and
+React Router for navigation state.
+
+@node Data Flow
+@section Data Flow
+
+Understanding how requests flow through the system is helpful when
+debugging or extending Xeetapus.
+
+@subheading Request Processing Pipeline
+
+When a client makes a request, it passes through several stages:
+
+@enumerate
+@item
+@strong{Rate limiting.}  The server checks whether the client's IP
+address has exceeded the rate limit.  If so, a @code{429 Too Many
+Requests} response is returned.
+
+@item
+@strong{CORS validation.}  The server checks whether the request's
+origin is in the allowed list.  If not, a @code{403 Forbidden}
+response is returned.
+
+@item
+@strong{Route matching.}  The server attempts to match the request path
+to a registered route.  If no route matches, a @code{404 Not Found}
+response is returned.
+
+@item
+@strong{Authentication.}  For protected routes, the server extracts the
+session cookie and validates the JWT token.  If the token is invalid
+or missing, a @code{401 Unauthorized} response is returned.
+
+@item
+@strong{CSRF verification.}  For state-changing requests (POST, PUT,
+DELETE), the server validates the CSRF token.  If the token is invalid,
+a @code{403 Forbidden} response is returned.
+
+@item
+@strong{Input validation.}  Request body parameters are validated
+according to the route's rules.  Invalid input results in a
+@code{400 Bad Request} response.
+
+@item
+@strong{Route handler.}  If all preceding checks pass, the request
+reaches the route handler, which executes the business logic and
+generates a response.
+
+@item
+@strong{Security headers.}  Before sending the response, the server
+adds security-related HTTP headers such as @code{X-Frame-Options} and
+@code{Content-Security-Policy}.
+@end enumerate
+
+@subheading Authentication Flow
+
+When a user logs in, the following sequence occurs:
+
+@enumerate
+@item
+The client sends a POST request to @code{/api/auth/login} with the
+username and password.
+
+@item
+The server validates the credentials against the stored password hash.
+
+@item
+On success, the server generates a JWT token containing the user's ID.
+
+@item
+The server sets a session cookie containing the JWT token and returns
+the user's profile.
+
+@item
+On subsequent requests, the browser automatically includes the session
+cookie.
+
+@item
+The server extracts and validates the JWT from the cookie.
+@end enumerate
+
+@node Security Architecture
+@section Security Architecture
+
+Security is implemented as a series of independent layers, each
+addressing a specific threat.  This defense-in-depth approach ensures
+that a failure in one layer does not compromise the entire system.
+
+For detailed information about security features, see @ref{Security
+Implementation}.
+
+The main security components are:
+
+@table @asis
+@item Password hashing
+Passwords are hashed using PBKDF2-HMAC-SHA256 with a configurable number
+of iterations.  Each password has a unique salt generated during
+registration.
+
+@item JWT tokens
+Authentication tokens are signed using HMAC-SHA256.  The server verifies
+the signature and expiration before trusting the token contents.
+
+@item CSRF protection
+State-changing requests require a valid CSRF token in the
+@code{X-CSRF-Token} header.  Tokens are signed and expire after 24
+hours.
+
+@item Rate limiting
+IP-based rate limiting prevents brute force attacks and denial of
+service.  The sliding window algorithm provides fair throttling.
+
+@item Input validation
+All user input is validated before use.  This prevents injection attacks
+and ensures data integrity.
+@end table
+
+@node Performance Considerations
+@section Performance Considerations
+
+Xeetapus is designed for simplicity and correctness rather than
+maximum performance.  Nevertheless, several measures ensure reasonable
+responsiveness.
+
+@subheading Backend Optimizations
+
+The backend uses several performance techniques:
+
+@itemize @bullet
+@item
+Single database connection with efficient query patterns avoids
+connection overhead.
+
+@item
+Arena allocators reduce memory allocation frequency during request
+handling.
+
+@item
+Static files are served from memory when possible, reducing disk I/O.
+
+@item
+SQLite with appropriate indexes handles typical workloads efficiently.
+@end itemize
+
+@subheading Frontend Optimizations
+
+The frontend build process includes several optimizations:
+
+@itemize @bullet
+@item
+Code splitting separates vendor libraries (React, React DOM) from
+application code, improving caching efficiency.
+
+@item
+Vite's development server provides fast module replacement during
+development.
+
+@item
+Tailwind CSS removes unused styles, reducing CSS bundle size.
+@end itemize
+
+@subheading Scalability Limitations
+
+The current architecture has some limitations for large-scale
+deployments:
+
+@itemize @bullet
+@item
+Single-process backend cannot utilize multiple CPU cores without
+additional configuration.
+
+@item
+SQLite uses a file-based locking model that limits concurrent write
+throughput.
+
+@item
+No built-in caching layer means repeated database queries are not
+memoized.
+@end itemize
+
+For high-traffic deployments, consider running multiple backend
+instances behind a load balancer, migrating to PostgreSQL, or adding a
+caching layer such as Redis.
+
+@node Design Rationale
+@section Design Rationale
+
+This section explains why certain technical decisions were made.
+
+@subsection Why Zig for the Backend?
+
+Zig was chosen for several reasons:
+
+@itemize @bullet
+@item
+Performance comparable to C, important for a server handling many
+concurrent connections.
+
+@item
+Memory safety without garbage collection, reducing latency spikes.
+
+@item
+Single binary deployment, simplifying operations.
+
+@item
+Direct SQLite bindings through a simple C interop mechanism.
+@end itemize
+
+@subsection Why SQLite?
+
+SQLite provides several advantages for a project like Xeetapus:
+
+@itemize @bullet
+@item
+Zero-configuration operation.  No database server to install or manage.
+
+@item
+Single-file database makes backups trivial.
+
+@item
+Sufficient performance for moderate traffic levels.
+
+@item
+Easy migration to PostgreSQL if needed later.
+@end itemize
+
+@subsection Why React?
+
+React is a mature, widely-used framework with excellent tooling:
+
+@itemize @bullet
+@item
+Large ecosystem of libraries and components.
+
+@item
+Strong TypeScript integration catches errors at compile time.
+
+@item
+Vite provides an excellent development experience with fast hot module
+replacement.
+
+@item
+Wide availability of developers familiar with the framework.
+@end itemize
+
+@cindex architecture
+@cindex backend
+@cindex frontend
+@cindex data flow

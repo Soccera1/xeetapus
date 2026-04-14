@@ -87,3 +87,38 @@ dev:
     @echo ""
     @echo "Press Ctrl+C to stop"
     @wait
+
+# Clean documentation build artifacts
+docs-clean:
+    @echo "🧹 Cleaning documentation artifacts..."
+    @rm -rf docs/texi/html
+    @rm -f docs/texi/xeetapus.info docs/texi/xeetapus.html docs/texi/xeetapus
+    @echo "✅ Documentation clean complete!"
+
+# Build Info documentation
+docs-info:
+    @echo "📚 Building Info documentation..."
+    @mkdir -p docs/texi
+    @cd docs/texi && texi2any --info -o xeetapus.info xeetapus.texi
+    @echo "✅ Info docs built: docs/texi/xeetapus.info"
+
+# Build separate HTML files (one per node)
+docs-html:
+    @echo "📚 Building separate HTML documentation..."
+    @mkdir -p docs/texi/html
+    @cd docs/texi && texi2any --html -o html xeetapus.texi
+    @echo "✅ Separate HTML docs built: docs/texi/html/"
+
+# Build unified single-file HTML document
+docs-html-single:
+    @echo "📚 Building unified HTML documentation..."
+    @mkdir -p docs/texi
+    @cd docs/texi && texi2any --html --no-split -o xeetapus.html xeetapus.texi
+    @echo "✅ Unified HTML doc built: docs/texi/xeetapus.html"
+
+# Build all documentation formats
+docs: docs-info docs-html docs-html-single
+    @echo "✅ All documentation built!"
+    @echo "   Info:         docs/texi/xeetapus.info"
+    @echo "   HTML split:   docs/texi/html/"
+    @echo "   HTML unified: docs/texi/xeetapus.html"

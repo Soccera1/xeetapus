@@ -1,0 +1,482 @@
+@node Database Schema
+@chapter Database Schema
+
+This chapter describes the database schema used by Xeetapus.  The
+database is implemented using SQLite, a lightweight, serverless database
+engine.  All application data is stored in a single file.
+
+@menu
+* Introduction::                 Overview of the database.
+* Users Table::                  User accounts and profiles.
+* Posts Table::                  User posts (xeets).
+* Social Tables::                Likes, follows, comments, and reposts.
+* Notifications Table::          User notifications.
+* Communities Table::            Topic-based groups.
+* Messages Table::               Direct messaging.
+* Polls Table::                  Poll system.
+* Blocking and Muting::          User restrictions.
+* Drafts Table::                  Saved drafts.
+* LLM Configuration::             AI provider settings.
+* Indexes::                      Database indexes for performance.
+* Migrations::                   Schema versioning.
+* Backup and Restore::            Data protection.
+@end menu
+
+@node Introduction
+@section Introduction
+
+The Xeetapus database is stored as a single SQLite file.  By default,
+this file is named @file{xeetapus.db} and is located in the backend
+directory.  The location may be changed using the
+@env{XEETAPUS_DB_PATH} environment variable.
+
+SQLite was chosen for its simplicity.  There is no database server to
+install or configure; the database is simply a file on disk.  This
+makes backups straightforward: simply copy the file to another location.
+
+The database schema is versioned through a migration system.  Migrations
+are applied automatically when the server starts.  New schema changes are
+recorded as migrations in the source code.
+
+@node Users Table
+@section Users Table
+
+The @code{users} table stores user account information.
+
+@float Table, tab:users
+@caption{users}
+@multitable @columnfractions 0.2 0.15 0.25 0.4
+@headitem Column @tab Type @tab Constraints @tab Description
+@item id @tab INTEGER @tab PRIMARY KEY AUTOINCREMENT @tab Unique user ID
+@item username @tab TEXT @tab UNIQUE, NOT NULL @tab Username (3-20 chars)
+@item email @tab TEXT @tab UNIQUE, NOT NULL @tab Email address
+@item password_hash @tab TEXT @tab NOT NULL @tab PBKDF2 hash of password
+@item display_name @tab TEXT @tab @tab Public display name
+@item bio @tab TEXT @tab @tab User biography
+@item avatar_url @tab TEXT @tab @tab URL to avatar image
+@item created_at @tab DATETIME @tab DEFAULT CURRENT_TIMESTAMP @tab Account creation time
+@item updated_at @tab DATETIME @tab DEFAULT CURRENT_TIMESTAMP @tab Last modification time
+@end multitable
+@end float
+
+Indexes are created on the @code{username} and @code{email} columns to
+ensure fast lookups during authentication and profile retrieval.
+
+@example
+INSERT INTO users (username, email, password_hash)
+VALUES ('johndoe', 'john@@example.com', '$pbkdf2-sha256$...');
+@end example
+
+@node Posts Table
+@section Posts Table
+
+The @code{posts} table stores user-generated content.
+
+@float Table, tab:posts
+@caption{posts}
+@multitable @columnfractions 0.2 0.15 0.25 0.4
+@headitem Column @tab Type @tab Constraints @tab Description
+@item id @tab INTEGER @tab PRIMARY KEY AUTOINCREMENT @tab Unique post ID
+@item user_id @tab INTEGER @tab NOT NULL, FK(users.id) @tab Author's user ID
+@item content @tab TEXT @tab NOT NULL @tab Post content (max 280 chars)
+@item media_urls @tab TEXT @tab @tab JSON array of media URLs
+@item reply_to_id @tab INTEGER @tab FK(posts.id) @tab Parent post (for replies)
+@item poll_id @tab INTEGER @tab FK(polls.id) @tab Attached poll (optional)
+@item created_at @tab DATETIME @tab DEFAULT CURRENT_TIMESTAMP @tab Creation time
+@end multitable
+@end float
+
+Posts support several features:
+
+@itemize @bullet
+@item
+Regular posts containing text content.
+
+@item
+Replies to other posts (indicated by @code{reply_to_id}).
+
+@item
+Posts with attached media (stored as a JSON array in @code{media_urls}).
+
+@item
+Posts with attached polls (indicated by @code{poll_id}).
+@end itemize
+
+Indexes are created on @code{user_id} for user lookups, @code{created_at}
+for timeline queries, and @code{reply_to_id} for loading replies.
+
+@node Social Tables
+@section Social Tables
+
+Several tables track social relationships and interactions.
+
+@float Table, tab:likes
+@caption{likes}
+@multitable @columnfractions 0.2 0.15 0.25 0.4
+@headitem Column @tab Type @tab Constraints @tab Description
+@item id @tab INTEGER @tab PRIMARY KEY AUTOINCREMENT @tab Unique like ID
+@item user_id @tab INTEGER @tab NOT NULL, FK(users.id) @tab User who liked
+@item post_id @tab INTEGER @tab NOT NULL, FK(posts.id) @tab Liked post
+@item created_at @tab DATETIME @tab DEFAULT CURRENT_TIMESTAMP @tab Like time
+@end multitable
+@end float
+
+A unique constraint on @code{(user_id, post_id)} ensures a user cannot
+like the same post twice.
+
+@float Table, tab:follows
+@caption{follows}
+@multitable @columnfractions 0.2 0.15 0.25 0.4
+@headitem Column @tab Type @tab Constraints @tab Description
+@item id @tab INTEGER @tab PRIMARY KEY AUTOINCREMENT @tab Unique follow ID
+@item follower_id @tab INTEGER @tab NOT NULL, FK(users.id) @tab User following
+@item following_id @tab INTEGER @tab NOT NULL, FK(users.id) @tab User being followed
+@item created_at @tab DATETIME @tab DEFAULT CURRENT_TIMESTAMP @tab Follow time
+@end multitable
+@end float
+
+A unique constraint on @code{(follower_id, following_id)} prevents
+duplicate follow relationships.
+
+@float Table, tab:comments
+@caption{comments}
+@multitable @columnfractions 0.2 0.15 0.25 0.4
+@headitem Column @tab Type @tab Constraints @tab Description
+@item id @tab INTEGER @tab PRIMARY KEY AUTOINCREMENT @tab Unique comment ID
+@item user_id @tab INTEGER @tab NOT NULL, FK(users.id) @tab Comment author
+@item post_id @tab INTEGER @tab NOT NULL, FK(posts.id) @tab Commented post
+@item content @tab TEXT @tab NOT NULL @tab Comment content
+@item created_at @tab DATETIME @tab DEFAULT CURRENT_TIMESTAMP @tab Creation time
+@end multitable
+@end float
+
+@node Notifications Table
+@section Notifications Table
+
+The @code{notifications} table tracks events that users should be
+informed about.
+
+@float Table, tab:notifications
+@caption{notifications}
+@multitable @columnfractions 0.2 0.15 0.25 0.4
+@headitem Column @tab Type @tab Constraints @tab Description
+@item id @tab INTEGER @tab PRIMARY KEY AUTOINCREMENT @tab Unique notification ID
+@item user_id @tab INTEGER @tab NOT NULL, FK(users.id) @tab Recipient user
+@item actor_id @tab INTEGER @tab NOT NULL, FK(users.id) @tab User who triggered event
+@item type @tab TEXT @tab NOT NULL @tab Event type
+@item post_id @tab INTEGER @tab FK(posts.id) @tab Related post (if applicable)
+@item read @tab INTEGER @tab DEFAULT 0 @tab Read status (0 = unread, 1 = read)
+@item created_at @tab DATETIME @tab DEFAULT CURRENT_TIMESTAMP @tab Creation time
+@end multitable
+@end float
+
+The @code{type} column indicates the nature of the notification:
+
+@table @asis
+@item like
+Another user liked one of your posts.
+
+@item follow
+Another user followed you.
+
+@item mention
+Another user mentioned you in a post.
+
+@item comment
+Another user commented on your post.
+
+@item repost
+Another user reposted your post.
+@end table
+
+@node Communities Table
+@section Communities Table
+
+The @code{communities} table stores topic-based groups.
+
+@float Table, tab:communities
+@caption{communities}
+@multitable @columnfractions 0.2 0.15 0.25 0.4
+@headitem Column @tab Type @tab Constraints @tab Description
+@item id @tab INTEGER @tab PRIMARY KEY AUTOINCREMENT @tab Unique community ID
+@item name @tab TEXT @tab UNIQUE, NOT NULL @tab Community name
+@item description @tab TEXT @tab @tab Community description
+@item created_by @tab INTEGER @tab NOT NULL, FK(users.id) @tab Creator user ID
+@item created_at @tab DATETIME @tab DEFAULT CURRENT_TIMESTAMP @tab Creation time
+@end multitable
+@end float
+
+Community memberships are tracked in a separate @code{community_members}
+table (not shown).  Posts can optionally belong to a community via the
+@code{community_id} column in the @code{posts} table.
+
+@node Messages Table
+@section Messages Table
+
+The @code{messages} table stores direct messages between users.
+
+@float Table, tab:messages
+@caption{messages}
+@multitable @columnfractions 0.2 0.15 0.25 0.4
+@headitem Column @tab Type @tab Constraints @tab Description
+@item id @tab INTEGER @tab PRIMARY KEY AUTOINCREMENT @tab Unique message ID
+@item conversation_id @tab INTEGER @tab NOT NULL, FK(conversations.id) @tab Conversation
+@item sender_id @tab INTEGER @tab NOT NULL, FK(users.id) @tab Sender user ID
+@item content @tab TEXT @tab NOT NULL @tab Message content
+@item media_urls @tab TEXT @tab @tab JSON array of media URLs
+@item read @tab INTEGER @tab DEFAULT 0 @tab Read status (0 = unread, 1 = read)
+@item created_at @tab DATETIME @tab DEFAULT CURRENT_TIMESTAMP @tab Send time
+@end multitable
+@end float
+
+Conversations are stored in a separate @code{conversations} table that
+tracks the participants.  This design allows efficient listing of
+conversations without scanning all messages.
+
+@node Polls Table
+@section Polls Table
+
+The poll system uses three tables: @code{polls}, @code{poll_options}, and
+@code{poll_votes}.
+
+@float Table, tab:polls
+@caption{polls}
+@multitable @columnfractions 0.2 0.15 0.25 0.4
+@headitem Column @tab Type @tab Constraints @tab Description
+@item id @tab INTEGER @tab PRIMARY KEY AUTOINCREMENT @tab Unique poll ID
+@item post_id @tab INTEGER @tab NOT NULL, FK(posts.id) @tab Associated post
+@item question @tab TEXT @tab NOT NULL @tab Poll question
+@item duration_minutes @tab INTEGER @tab DEFAULT 1440 @tab Duration in minutes
+@item created_at @tab DATETIME @tab DEFAULT CURRENT_TIMESTAMP @tab Creation time
+@item ends_at @tab DATETIME @tab @tab Computed end time
+@end multitable
+@end float
+
+@float Table, tab:poll-options
+@caption{poll_options}
+@multitable @columnfractions 0.2 0.15 0.25 0.4
+@headitem Column @tab Type @tab Constraints @tab Description
+@item id @tab INTEGER @tab PRIMARY KEY AUTOINCREMENT @tab Unique option ID
+@item poll_id @tab INTEGER @tab NOT NULL, FK(polls.id) @tab Parent poll
+@item option_text @tab TEXT @tab NOT NULL @tab Option text
+@item position @tab INTEGER @tab NOT NULL @tab Display order
+@item vote_count @tab INTEGER @tab DEFAULT 0 @tab Number of votes
+@end multitable
+@end float
+
+@float Table, tab:poll-votes
+@caption{poll_votes}
+@multitable @columnfractions 0.2 0.15 0.25 0.4
+@headitem Column @tab Type @tab Constraints @tab Description
+@item id @tab INTEGER @tab PRIMARY KEY AUTOINCREMENT @tab Unique vote ID
+@item poll_id @tab INTEGER @tab NOT NULL, FK(polls.id) @tab Poll voted on
+@item option_id @tab INTEGER @tab NOT NULL, FK(poll_options.id) @tab Chosen option
+@item user_id @tab INTEGER @tab NOT NULL, FK(users.id) @tab Voter
+@item created_at @tab DATETIME @tab DEFAULT CURRENT_TIMESTAMP @tab Vote time
+@end multitable
+@end float
+
+A unique constraint on @code{(poll_id, user_id)} ensures a user can
+vote only once per poll.
+
+@node Blocking and Muting
+@section Blocking and Muting
+
+The @code{blocks} and @code{mutes} tables track user restrictions.
+
+@float Table, tab:blocks
+@caption{blocks}
+@multitable @columnfractions 0.2 0.15 0.25 0.4
+@headitem Column @tab Type @tab Constraints @tab Description
+@item id @tab INTEGER @tab PRIMARY KEY AUTOINCREMENT @tab Unique block ID
+@item blocker_id @tab INTEGER @tab NOT NULL, FK(users.id) @tab User who blocked
+@item blocked_id @tab INTEGER @tab NOT NULL, FK(users.id) @tab Blocked user
+@item created_at @tab DATETIME @tab DEFAULT CURRENT_TIMESTAMP @tab Block time
+@end multitable
+@end float
+
+@float Table, tab:mutes
+@caption{mutes}
+@multitable @columnfractions 0.2 0.15 0.25 0.4
+@headitem Column @tab Type @tab Constraints @tab Description
+@item id @tab INTEGER @tab PRIMARY KEY AUTOINCREMENT @tab Unique mute ID
+@item muter_id @tab INTEGER @tab NOT NULL, FK(users.id) @tab User who muted
+@item muted_id @tab INTEGER @tab NOT NULL, FK(users.id) @tab Muted user
+@item created_at @tab DATETIME @tab DEFAULT CURRENT_TIMESTAMP @tab Mute time
+@end multitable
+@end float
+
+Both tables have unique constraints preventing duplicate relationships.
+
+Blocking is more restrictive than muting: blocked users cannot see your
+content or interact with you.  Muted users are simply hidden from your
+timeline without their knowledge.
+
+@node Drafts Table
+@section Drafts Table
+
+The @code{drafts} table stores unpublished post drafts.
+
+@float Table, tab:drafts
+@caption{drafts}
+@multitable @columnfractions 0.2 0.15 0.25 0.4
+@headitem Column @tab Type @tab Constraints @tab Description
+@item id @tab INTEGER @tab PRIMARY KEY AUTOINCREMENT @tab Unique draft ID
+@item user_id @tab INTEGER @tab NOT NULL, FK(users.id) @tab Author
+@item content @tab TEXT @tab NOT NULL @tab Draft content
+@item media_urls @tab TEXT @tab @tab JSON array of media URLs
+@item created_at @tab DATETIME @tab DEFAULT CURRENT_TIMESTAMP @tab Creation time
+@end multitable
+@end float
+
+Drafts are private to each user and are not visible to others.
+
+@node LLM Configuration
+@section LLM Configuration
+
+The @code{llm_provider_configs} table stores per-user AI provider settings.
+
+@float Table, tab:llm-provider-configs
+@caption{llm_provider_configs}
+@multitable @columnfractions 0.2 0.15 0.25 0.4
+@headitem Column @tab Type @tab Constraints @tab Description
+@item id @tab INTEGER @tab PRIMARY KEY AUTOINCREMENT @tab Unique config ID
+@item user_id @tab INTEGER @tab NOT NULL, FK(users.id) @tab User
+@item provider @tab TEXT @tab NOT NULL @tab Provider name
+@item api_key @tab TEXT @tab NOT NULL @tab Encrypted API key
+@item model @tab TEXT @tab NOT NULL @tab Model name
+@item base_url @tab TEXT @tab @tab Custom API URL (optional)
+@item is_default @tab INTEGER @tab DEFAULT 0 @tab Default provider flag
+@item created_at @tab DATETIME @tab DEFAULT CURRENT_TIMESTAMP @tab Creation time
+@end multitable
+@end float
+
+A unique constraint on @code{(user_id, provider)} ensures one default
+configuration per provider per user.
+
+@node Indexes
+@section Indexes
+
+Indexes improve query performance for common operations.  The following
+indexes are recommended for production deployments:
+
+@example
+-- Users table
+CREATE INDEX idx_users_username ON users(username);
+CREATE INDEX idx_users_email ON users(email);
+
+-- Posts table
+CREATE INDEX idx_posts_user_id ON posts(user_id);
+CREATE INDEX idx_posts_created_at ON posts(created_at DESC);
+CREATE INDEX idx_posts_reply_to_id ON posts(reply_to_id);
+
+-- Likes table
+CREATE INDEX idx_likes_post_id ON likes(post_id);
+CREATE INDEX idx_likes_user_id ON likes(user_id);
+
+-- Follows table
+CREATE INDEX idx_follows_follower ON follows(follower_id);
+CREATE INDEX idx_follows_following ON follows(following_id);
+
+-- Notifications table
+CREATE INDEX idx_notifications_user ON notifications(user_id);
+CREATE INDEX idx_notifications_read ON notifications(read);
+
+-- Messages table
+CREATE INDEX idx_messages_conversation ON messages(conversation_id);
+CREATE INDEX idx_messages_created ON messages(created_at DESC);
+@end example
+
+The SQLite query optimizer will automatically use these indexes when
+available.  Check query performance using the @code{EXPLAIN QUERY PLAN}
+command.
+
+@node Migrations
+@section Migrations
+
+The database schema is versioned through a migration system in
+@file{backend/src/db.zig}.  Migrations are applied automatically when
+the server starts.
+
+New tables are created using @code{CREATE TABLE IF NOT EXISTS}
+statements, which ensures idempotency.  Existing tables can be modified
+using @code{ALTER TABLE} statements recorded in the schema migrations
+array.
+
+To add a new table:
+
+@enumerate
+@item
+Add a @code{CREATE TABLE} statement to the @code{migrations} array in
+@file{db.zig}.
+
+@item
+Restart the server.  The migration will be applied automatically.
+@end enumerate
+
+@node Backup and Restore
+@section Backup and Restore
+
+Because the database is a single file, backup and restore operations
+are straightforward.
+
+@subheading Manual Backup
+
+@example
+sqlite3 /path/to/xeetapus.db ".backup '/path/to/backup.db'"
+@end example
+
+Or simply copy the file:
+
+@example
+cp /path/to/xeetapus.db /path/to/backup.db
+@end example
+
+It is recommended to stop the server before making backups to ensure a
+consistent snapshot.
+
+@subheading Automated Backup
+
+A cron job can automate daily backups:
+
+@example
+0 2 * * * sqlite3 /var/www/xeetapus/xeetapus.db ".backup '/var/backups/xeetapus-$(date +\%Y\%m\%d).db'"
+@end example
+
+@subheading Restore
+
+To restore from a backup:
+
+@enumerate
+@item
+Stop the server.
+
+@item
+Copy the backup file over the current database:
+@example
+cp /path/to/backup.db /path/to/xeetapus.db
+@end example
+
+@item
+Restart the server.
+@end enumerate
+
+@subheading Database Maintenance
+
+Periodically run these commands to maintain database performance:
+
+@example
+-- Optimize storage
+VACUUM;
+
+-- Update query planner statistics
+ANALYZE;
+
+-- Check for corruption
+PRAGMA integrity_check;
+@end example
+
+@cindex database
+@cindex SQLite
+@cindex schema
+@cindex migrations

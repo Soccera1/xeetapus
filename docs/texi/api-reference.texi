@@ -1,0 +1,813 @@
+@node API Reference
+@chapter API Reference
+
+This chapter documents the complete Xeetapus HTTP API.  The API follows
+RESTful conventions and uses JSON for request and response bodies.
+
+@menu
+* Overview::                    General API conventions.
+* Authentication::              How to authenticate requests.
+* Response Format::             Standard response structure.
+* HTTP Status Codes::           What status codes mean.
+* Rate Limiting::               Request limits and headers.
+* Pagination::                   How to paginate through results.
+* Auth Endpoints::              Registration, login, and logout.
+* User Endpoints::              Profiles and relationships.
+* Post Endpoints::              Posts and interactions.
+* Timeline Endpoints::           Feeds and timelines.
+* Notification Endpoints::        User notifications.
+* Search Endpoints::             Search functionality.
+* Community Endpoints::          Groups and memberships.
+* Message Endpoints::            Direct messaging.
+* Poll Endpoints::               Voting on polls.
+* Media Endpoints::              File uploads.
+* Health Check::                Service status.
+@end menu
+
+@node Overview
+@section Overview
+
+The Xeetapus API is available at the following base URLs:
+
+@table @asis
+@item Development
+@code{http://localhost:8080/api}
+
+@item Production
+@code{https://your-domain.com/api}
+@end table
+
+All API endpoints are relative to this base URL.  For example, the
+login endpoint at @code{POST /api/auth/login} would be accessed as
+@code{http://localhost:8080/api/auth/login} in development.
+
+@node Authentication
+@section Authentication
+
+The API uses cookie-based authentication with JWT tokens.  To
+authenticate, you must first obtain a session cookie through the login
+endpoint.  The browser will then automatically include this cookie in
+subsequent requests.
+
+@subheading Obtaining a Session
+
+Send a POST request to @code{/api/auth/login} with valid credentials.
+Upon success, the server will set a @code{session} cookie:
+
+@example
+POST /api/auth/login
+Content-Type: application/json
+
+@{"username":"user","password":"password"@}
+@end example
+
+The response will include a @code{Set-Cookie} header containing the
+session token.
+
+@subheading CSRF Protection
+
+For state-changing requests (POST, PUT, DELETE), you must include a
+CSRF token in the @code{X-CSRF-Token} header.  The CSRF token is
+returned in the response body from @code{/api/auth/me}:
+
+@example
+X-CSRF-Token: 1712345678:abc123...:def456...
+@end example
+
+The CSRF token is signed and expires after 24 hours.
+
+@node Response Format
+@section Response Format
+
+All API responses are JSON objects.
+
+@subheading Success Response
+
+Successful responses have the following structure:
+
+@verbatim
+@{
+  "data": @{...@},
+  "status": "success"
+@}
+@end verbatim
+
+For responses that return a single object, the object is returned
+directly as the value of the @code{data} field.
+
+@subheading Error Response
+
+Error responses have the following structure:
+
+@verbatim
+@{
+  "error": "Error message describing what went wrong",
+  "status": "error"
+@}
+@end verbatim
+
+@node HTTP Status Codes
+@section HTTP Status Codes
+
+The API uses standard HTTP status codes to indicate the result of a
+request.
+
+@table @asis
+@item 200 OK
+The request succeeded.
+
+@item 201 Created
+The request succeeded and a new resource was created.
+
+@item 204 No Content
+The request succeeded.  No response body is returned (used for
+successful deletions).
+
+@item 400 Bad Request
+The request was malformed or contained invalid parameters.
+
+@item 401 Unauthorized
+Authentication is required or the provided credentials are invalid.
+
+@item 403 Forbidden
+The server understood the request but refuses to fulfill it.  This may
+indicate a CSRF validation failure or insufficient permissions.
+
+@item 404 Not Found
+The requested resource does not exist.
+
+@item 409 Conflict
+The request conflicts with existing data (e.g., duplicate username).
+
+@item 429 Too Many Requests
+The rate limit has been exceeded.  See @ref{Rate Limiting}.
+
+@item 500 Internal Server Error
+An unexpected error occurred on the server.
+@end table
+
+@node Rate Limiting
+@section Rate Limiting
+
+The API enforces rate limits to prevent abuse.  By default, clients are
+limited to 100 requests per 60-second window per IP address.
+
+@subheading Rate Limit Headers
+
+Every response includes headers indicating the current rate limit
+status:
+
+@table @asis
+@item X-RateLimit-Limit
+The maximum number of requests allowed in the window.
+
+@item X-RateLimit-Remaining
+The number of requests remaining in the current window.
+
+@item X-RateLimit-Reset
+The Unix timestamp when the window will reset.
+@end table
+
+@subheading When Rate Limited
+
+When a client exceeds the rate limit, the server returns a @code{429
+Too Many Requests} response:
+
+@verbatim
+@{
+  "error": "Rate limit exceeded. Please try again later.",
+  "status": "error"
+@}
+@end verbatim
+
+Wait until the @code{X-RateLimit-Reset} timestamp before making
+additional requests.
+
+@node Pagination
+@section Pagination
+
+Endpoints that return lists support pagination through query parameters.
+
+@table @asis
+@item page
+The page number to retrieve.  Defaults to 1.
+
+@item limit
+The number of items per page.  Defaults to 20, maximum 100.
+@end table
+
+@example
+GET /api/posts?page=2&limit=50
+@end example
+
+Paginated responses include metadata about the current page and total
+available pages:
+
+@verbatim
+@{
+  "data": [...],
+  "page": 2,
+  "total_pages": 10,
+  "status": "success"
+@}
+@end verbatim
+
+@node Auth Endpoints
+@section Authentication Endpoints
+
+@deffn POST /api/auth/register
+Register a new user account.
+@end deffn
+
+@subheading Request Body
+
+@table @asis
+@item username
+String.  Required.  3 to 20 characters.  May contain letters, numbers,
+and underscores.  Must start with a letter.
+
+@item email
+String.  Required.  A valid email address.
+
+@item password
+String.  Required.  At least 8 characters.  Must contain at least one
+uppercase letter, one lowercase letter, and one digit.
+@end table
+
+@subheading Response
+
+Returns the newly created user object with status @code{201 Created}.
+
+@example
+@{
+  "id": 1,
+  "username": "johndoe",
+  "email": "john@@example.com",
+  "created_at": "2024-01-15T10:30:00Z"
+@}
+@end example
+
+@subheading Errors
+
+@table @asis
+@item 400
+Invalid input data.
+
+@item 409
+Username or email already exists.
+@end table
+
+@deffn POST /api/auth/login
+Authenticate a user and create a session.
+@end deffn
+
+@subheading Request Body
+
+@table @asis
+@item username
+String.  Required.  The user's username.
+
+@item password
+String.  Required.  The user's password.
+@end table
+
+@subheading Response
+
+Returns the authenticated user object.  A @code{session} cookie is set.
+
+@example
+@{
+  "id": 1,
+  "username": "johndoe",
+  "email": "john@@example.com",
+  "display_name": "John Doe",
+  "bio": "Developer",
+  "avatar_url": null,
+  "created_at": "2024-01-15T10:30:00Z"
+@}
+@end example
+
+@subheading Errors
+
+@table @asis
+@item 401
+Invalid username or password.
+@end table
+
+@deffn POST /api/auth/logout
+End the current session.
+@end deffn
+
+@subheading Authentication
+
+Requires authentication.
+
+@subheading Response
+
+Returns a success message.  The @code{session} cookie is cleared.
+
+@deffn GET /api/auth/me
+Get the currently authenticated user.
+@end deffn
+
+@subheading Authentication
+
+Requires authentication.
+
+@subheading Response
+
+Returns the authenticated user object, including the CSRF token.
+
+@example
+@{
+  "id": 1,
+  "username": "johndoe",
+  "email": "john@@example.com",
+  "display_name": "John Doe",
+  "bio": "Developer",
+  "avatar_url": null,
+  "csrf_token": "abc123...",
+  "created_at": "2024-01-15T10:30:00Z"
+@}
+@end example
+
+@node User Endpoints
+@section User Endpoints
+
+@deffn GET /api/users/@{username@}
+Get a user's public profile.
+@end deffn
+
+@subheading Authentication
+
+Not required.
+
+@subheading Response
+
+@example
+@{
+  "id": 1,
+  "username": "johndoe",
+  "display_name": "John Doe",
+  "bio": "Software developer",
+  "avatar_url": null,
+  "followers_count": 150,
+  "following_count": 200,
+  "posts_count": 50,
+  "created_at": "2024-01-15T10:30:00Z"
+@}
+@end example
+
+@deffn POST /api/users/@{username@}/follow
+Follow a user.
+@end deffn
+
+@subheading Authentication
+
+Requires authentication.
+
+@deffn DELETE /api/users/@{username@}/follow
+Unfollow a user.
+@end deffn
+
+@subheading Authentication
+
+Requires authentication.
+
+@deffn PUT /api/users/me
+Update the current user's profile.
+@end deffn
+
+@subheading Authentication
+
+Requires authentication.
+
+@subheading Request Body
+
+@table @asis
+@item display_name
+String.  Optional.  The user's display name.
+
+@item bio
+String.  Optional.  The user's biography.  Maximum 160 characters.
+
+@item avatar_url
+String.  Optional.  URL of the user's avatar image.
+@end table
+
+@deffn POST /api/users/@{username@}/block
+Block a user.
+@end deffn
+
+@subheading Authentication
+
+Requires authentication.
+
+@deffn POST /api/users/@{username@}/mute
+Mute a user.
+@end deffn
+
+@subheading Authentication
+
+Requires authentication.
+
+@node Post Endpoints
+@section Post Endpoints
+
+@deffn GET /api/posts
+Get a paginated list of posts.
+@end deffn
+
+@subheading Authentication
+
+Not required.
+
+@subheading Query Parameters
+
+@table @asis
+@item page
+Integer.  Page number.  Defaults to 1.
+
+@item limit
+Integer.  Items per page.  Defaults to 20, maximum 100.
+@end table
+
+@deffn POST /api/posts
+Create a new post.
+@end deffn
+
+@subheading Authentication
+
+Requires authentication.  CSRF token required.
+
+@subheading Request Body
+
+@table @asis
+@item content
+String.  Required.  The post content.  Maximum 280 characters.
+
+@item media_urls
+Array of strings.  Optional.  URLs of attached media.
+
+@item reply_to_id
+Integer.  Optional.  The ID of the post being replied to.
+
+@item community_id
+Integer.  Optional.  The ID of the community to post in.
+@end table
+
+@subheading Response
+
+Returns the created post with status @code{201 Created}.
+
+@deffn GET /api/posts/@{id@}
+Get a specific post.
+@end deffn
+
+@subheading Authentication
+
+Not required.
+
+@deffn DELETE /api/posts/@{id@}
+Delete a post.
+@end deffn
+
+@subheading Authentication
+
+Requires authentication.  CSRF token required.  You may only delete
+your own posts.
+
+@deffn POST /api/posts/@{id@}/like
+Like a post.
+@end deffn
+
+@subheading Authentication
+
+Requires authentication.  CSRF token required.
+
+@deffn DELETE /api/posts/@{id@}/like
+Unlike a post.
+@end deffn
+
+@subheading Authentication
+
+Requires authentication.  CSRF token required.
+
+@deffn POST /api/posts/@{id@}/repost
+Repost a post.
+@end deffn
+
+@subheading Authentication
+
+Requires authentication.  CSRF token required.
+
+@deffn POST /api/posts/@{id@}/bookmark
+Bookmark a post for later.
+@end deffn
+
+@subheading Authentication
+
+Requires authentication.  CSRF token required.
+
+@node Timeline Endpoints
+@section Timeline Endpoints
+
+@deffn GET /api/timeline
+Get the authenticated user's personalized timeline.
+@end deffn
+
+@subheading Authentication
+
+Requires authentication.
+
+@subheading Description
+
+Returns posts from users that the authenticated user follows, in
+reverse chronological order.
+
+@deffn GET /api/timeline/explore
+Get trending and popular posts.
+@end deffn
+
+@subheading Authentication
+
+Not required.
+
+@subheading Description
+
+Returns a curated selection of popular posts for discovery.
+
+@node Notification Endpoints
+@section Notification Endpoints
+
+@deffn GET /api/notifications
+Get the authenticated user's notifications.
+@end deffn
+
+@subheading Authentication
+
+Requires authentication.
+
+@subheading Response
+
+@example
+@{
+  "notifications": [
+    @{
+      "id": 1,
+      "type": "like",
+      "actor_username": "janedoe",
+      "post_id": 123,
+      "read": false,
+      "created_at": "2024-01-15T10:30:00Z"
+    @}
+  ],
+  "status": "success"
+@}
+@end example
+
+@subheading Notification Types
+
+@table @asis
+@item like
+Someone liked one of your posts.
+
+@item follow
+Someone followed you.
+
+@item mention
+Someone mentioned you in a post.
+
+@item comment
+Someone commented on your post.
+
+@item repost
+Someone reposted your post.
+@end table
+
+@deffn POST /api/notifications/read-all
+Mark all notifications as read.
+@end deffn
+
+@subheading Authentication
+
+Requires authentication.  CSRF token required.
+
+@node Search Endpoints
+@section Search Endpoints
+
+@deffn GET /api/search/users
+Search for users by username.
+@end deffn
+
+@subheading Authentication
+
+Not required.
+
+@subheading Query Parameters
+
+@table @asis
+@item q
+String.  Required.  The search query.
+
+@item page
+Integer.  Page number.  Defaults to 1.
+
+@item limit
+Integer.  Items per page.  Defaults to 20.
+@end table
+
+@deffn GET /api/search/posts
+Search for posts by content.
+@end deffn
+
+@subheading Authentication
+
+Not required.
+
+@subheading Query Parameters
+
+Same as @code{/api/search/users}.
+
+@node Community Endpoints
+@section Community Endpoints
+
+@deffn GET /api/communities
+List all communities.
+@end deffn
+
+@subheading Authentication
+
+Not required.
+
+@deffn POST /api/communities
+Create a new community.
+@end deffn
+
+@subheading Authentication
+
+Requires authentication.  CSRF token required.
+
+@subheading Request Body
+
+@table @asis
+@item name
+String.  Required.  The community name.  Unique.
+
+@item description
+String.  Optional.  A description of the community.
+@end table
+
+@deffn POST /api/communities/@{id@}/join
+Join a community.
+@end deffn
+
+@subheading Authentication
+
+Requires authentication.  CSRF token required.
+
+@node Message Endpoints
+@section Direct Message Endpoints
+
+@deffn GET /api/messages/conversations
+List the authenticated user's conversations.
+@end deffn
+
+@subheading Authentication
+
+Requires authentication.
+
+@deffn POST /api/messages/conversations/@{id@}
+Send a message in a conversation.
+@end deffn
+
+@subheading Authentication
+
+Requires authentication.  CSRF token required.
+
+@subheading Request Body
+
+@table @asis
+@item content
+String.  Required.  The message content.
+
+@item media_urls
+Array of strings.  Optional.  URLs of attached media.
+@end table
+
+@node Poll Endpoints
+@section Poll Endpoints
+
+@deffn POST /api/polls/@{id@}/vote
+Vote on a poll.
+@end deffn
+
+@subheading Authentication
+
+Requires authentication.  CSRF token required.
+
+@subheading Request Body
+
+@table @asis
+@item option_id
+Integer.  Required.  The ID of the chosen option.
+@end table
+
+@deffn GET /api/polls/@{id@}/results
+Get poll results.
+@end deffn
+
+@subheading Authentication
+
+Not required.
+
+@subheading Response
+
+@example
+@{
+  "poll_id": 1,
+  "total_votes": 100,
+  "options": [
+    @{
+      "id": 1,
+      "text": "Option A",
+      "votes": 60,
+      "percentage": 60.0
+    @},
+    @{
+      "id": 2,
+      "text": "Option B",
+      "votes": 40,
+      "percentage": 40.0
+    @}
+  ],
+  "status": "success"
+@}
+@end example
+
+@node Media Endpoints
+@section Media Endpoints
+
+@deffn POST /api/media/upload
+Upload an image or video.
+@end deffn
+
+@subheading Authentication
+
+Requires authentication.  CSRF token required.
+
+@subheading Request
+
+The request must use @code{multipart/form-data} encoding with the file
+in a field named @code{file}.
+
+@subheading Response
+
+Returns the URL of the uploaded file:
+
+@example
+@{
+  "url": "/media/abc123.jpg",
+  "status": "success"
+@}
+@end example
+
+@subheading Limits
+
+The maximum file size is 10 megabytes.  Supported formats depend on
+server configuration.
+
+@deffn GET /media/@{path@}
+Serve an uploaded media file.
+@end deffn
+
+@subheading Authentication
+
+Not required, but access may be restricted based on content.
+
+@node Health Check
+@section Health Check
+
+@deffn GET /api/health
+Check if the service is running.
+@end deffn
+
+@subheading Authentication
+
+Not required.
+
+@subheading Response
+
+@example
+@{
+  "status": "ok",
+  "service": "xeetapus"
+@}
+@end example
+
+Use this endpoint for load balancer health checks and monitoring.
+
+@cindex API
+@cindex REST
+@cindex authentication
+@cindex rate limiting
