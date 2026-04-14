@@ -34,6 +34,13 @@ build-backend:
     @cd backend && env ZIG_LOCAL_CACHE_DIR=/tmp/zig-cache ZIG_GLOBAL_CACHE_DIR=/tmp/zig-global-cache zig build
     @echo "✅ Backend build complete!"
 
+# Build the backend release binary
+build-backend-release:
+    @echo "📦 Building release Zig backend..."
+    @mkdir -p /tmp/zig-cache /tmp/zig-global-cache
+    @cd backend && env ZIG_LOCAL_CACHE_DIR=/tmp/zig-cache ZIG_GLOBAL_CACHE_DIR=/tmp/zig-global-cache zig build -Doptimize=ReleaseFast
+    @echo "✅ Release backend build complete!"
+
 # Build the frontend (React)
 build-frontend:
     @echo "📦 Building React frontend..."
@@ -122,3 +129,7 @@ docs: docs-info docs-html docs-html-single
     @echo "   Info:         docs/texi/xeetapus.info"
     @echo "   HTML split:   docs/texi/html/"
     @echo "   HTML unified: docs/texi/xeetapus.html"
+
+# Deploy to the production host
+deploy:
+    @./deploy/deploy.sh
