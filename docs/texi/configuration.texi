@@ -43,6 +43,9 @@ in the working directory.
 @item XEETAPUS_MEDIA_PATH
 Directory where uploaded media files are stored.  The default is
 @code{/var/www/xeetapus/media}.
+
+@item XEETAPUS_BIND_ADDR
+Address the backend listens on.  The default is @code{0.0.0.0}.
 @end table
 
 @node Required Settings
@@ -97,6 +100,8 @@ Example for production:
 
 @example
 XEETAPUS_ALLOWED_ORIGINS=https://example.com,https://www.example.com
+XEETAPUS_BIND_ADDR=127.0.0.1
+XEETAPUS_MEDIA_PATH=/var/www/xeetapus/media
 @end example
 
 @item XEETAPUS_RATE_LIMIT_REQUESTS
@@ -114,12 +119,29 @@ Duration of the rate limit window in seconds.  The default is
 Maximum size of incoming HTTP request bodies in bytes.  The default
 is @code{10485760} (10 megabytes).
 
-@item XEETAPUS_PBKDF2_ITERATIONS
-@vindex XEETAPUS_PBKDF2_ITERATIONS
-Number of iterations used for PBKDF2 password hashing.  Higher
-values increase security but also increase CPU usage during
-authentication.  The default is @code{32768}.  Production deployments
-may wish to increase this to @code{60000} or higher.
+@item XEETAPUS_ARGON2_TIME_COST
+@vindex XEETAPUS_ARGON2_TIME_COST
+Time cost for Argon2id password hashing.  The default is @code{3}.
+
+@item XEETAPUS_ARGON2_MEMORY_COST
+@vindex XEETAPUS_ARGON2_MEMORY_COST
+Memory cost for Argon2id password hashing, in KiB.  The default is
+@code{65536} (64 MiB).
+
+@item XEETAPUS_ARGON2_PARALLELISM
+@vindex XEETAPUS_ARGON2_PARALLELISM
+Degree of parallelism for Argon2id password hashing.  The default is
+@code{4}.
+
+@item XEETAPUS_AUTH_RATE_LIMIT_REQUESTS
+@vindex XEETAPUS_AUTH_RATE_LIMIT_REQUESTS
+Maximum number of authentication attempts permitted per auth rate
+limit window.  The default is @code{5}.
+
+@item XEETAPUS_AUTH_RATE_LIMIT_WINDOW
+@vindex XEETAPUS_AUTH_RATE_LIMIT_WINDOW
+Duration of the authentication rate limit window in seconds.  The
+default is @code{300}.
 
 @item XEETAPUS_MONERO_ADDRESS
 @vindex XEETAPUS_MONERO_ADDRESS
@@ -323,6 +345,7 @@ XEETAPUS_ENV=development
 XEETAPUS_PORT=8080
 XEETAPUS_DB_PATH=xeetapus.db
 XEETAPUS_ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173
+XEETAPUS_BIND_ADDR=127.0.0.1
 @end example
 
 @subsection Staging
@@ -331,6 +354,7 @@ XEETAPUS_ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173
 XEETAPUS_ENV=staging
 XEETAPUS_PORT=8080
 XEETAPUS_DB_PATH=/var/www/xeetapus/xeetapus.db
+XEETAPUS_MEDIA_PATH=/var/www/xeetapus/media
 XEETAPUS_ALLOWED_ORIGINS=https://staging.example.com
 XEETAPUS_RATE_LIMIT_REQUESTS=100
 XEETAPUS_RATE_LIMIT_WINDOW=60
@@ -347,7 +371,11 @@ XEETAPUS_ALLOWED_ORIGINS=https://example.com,https://www.example.com
 XEETAPUS_RATE_LIMIT_REQUESTS=100
 XEETAPUS_RATE_LIMIT_WINDOW=60
 XEETAPUS_MAX_REQUEST_SIZE=10485760
-XEETAPUS_PBKDF2_ITERATIONS=60000
+XEETAPUS_AUTH_RATE_LIMIT_REQUESTS=5
+XEETAPUS_AUTH_RATE_LIMIT_WINDOW=300
+XEETAPUS_ARGON2_TIME_COST=3
+XEETAPUS_ARGON2_MEMORY_COST=65536
+XEETAPUS_ARGON2_PARALLELISM=4
 @end example
 
 @cindex configuration

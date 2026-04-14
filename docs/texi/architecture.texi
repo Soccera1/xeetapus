@@ -109,12 +109,22 @@ Security-related functionality.  Exports security utilities from other
 modules for convenience.
 
 @item password.zig
-Password hashing using PBKDF2.  Provides secure password hashing and
-verification.
+Password hashing using Argon2id.  Provides secure password hashing and
+verification, while still recognizing legacy hashes for migration.
 
 @item tokens.zig
 JWT token generation and validation.  Creates signed tokens containing
 user session information.
+
+@item payments.zig
+Monero payment support.  Handles exchange-rate lookups, invoice
+creation, and payment status checks.
+
+@item llm.zig
+Per-user LLM provider configuration and chat endpoints.
+
+@item media.zig
+Media upload and static file serving.
 
 @item ratelimit.zig
 Rate limiting implementation.  Tracks request counts per IP address
@@ -158,8 +168,8 @@ Accessible without authentication.  These include health checks and
 public profile data.
 
 @item Protected routes
-Require a valid session cookie.  The server validates the JWT token
-before invoking the handler.
+Require a valid @code{auth_token} cookie or bearer token.  The server
+validates the JWT token before invoking the handler.
 
 @item Parameterized routes
 Include variable segments such as @code{:id} or @code{:username}.
@@ -236,8 +246,9 @@ response is returned.
 
 @item
 @strong{Authentication.}  For protected routes, the server extracts the
-session cookie and validates the JWT token.  If the token is invalid
-or missing, a @code{401 Unauthorized} response is returned.
+auth token from the cookie or Authorization header and validates the
+JWT token.  If the token is invalid or missing, a @code{401 Unauthorized}
+response is returned.
 
 @item
 @strong{CSRF verification.}  For state-changing requests (POST, PUT,
@@ -276,12 +287,12 @@ The server validates the credentials against the stored password hash.
 On success, the server generates a JWT token containing the user's ID.
 
 @item
-The server sets a session cookie containing the JWT token and returns
-the user's profile.
+The server sets an @code{auth_token} cookie containing the JWT token
+and returns the user's profile plus a CSRF token.
 
 @item
-On subsequent requests, the browser automatically includes the session
-cookie.
+On subsequent requests, the browser automatically includes the
+auth_token cookie.
 
 @item
 The server extracts and validates the JWT from the cookie.
@@ -301,9 +312,9 @@ The main security components are:
 
 @table @asis
 @item Password hashing
-Passwords are hashed using PBKDF2-HMAC-SHA256 with a configurable number
-of iterations.  Each password has a unique salt generated during
-registration.
+Passwords are hashed using Argon2id with configurable time, memory, and
+parallelism parameters.  The backend still recognizes legacy PBKDF2 and
+SHA-256 hashes during migration.
 
 @item JWT tokens
 Authentication tokens are signed using HMAC-SHA256.  The server verifies

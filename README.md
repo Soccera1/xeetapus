@@ -25,6 +25,7 @@ A fully functional clone of X (Twitter) built with Zig backend and React fronten
 - **Drafts**: Save unfinished posts
 - **Scheduled Posts**: Schedule posts for later
 - **Analytics**: View post engagement statistics
+- **AI Chat**: Configure per-provider LLM settings and chat with models
 - **Pinned Posts**: Pin important posts to your profile
 - **Monero Payments**: Accept Monero (XMR) payments
 
@@ -32,8 +33,8 @@ A fully functional clone of X (Twitter) built with Zig backend and React fronten
 
 Xeetapus implements comprehensive security measures following OWASP guidelines:
 
-- **Secure Authentication**: PBKDF2-inspired password hashing, JWT with HMAC-SHA256, httpOnly cookies
-- **Session Management**: Secure cookie-based sessions with SameSite=Strict protection
+- **Secure Authentication**: Argon2id password hashing, JWT with HMAC-SHA256, `auth_token` httpOnly cookies
+- **Session Management**: `auth_token` cookie with SameSite=Lax protection
 - **Rate Limiting**: Configurable rate limits (default: 100 req/min) with proper headers
 - **CSRF Protection**: CSRF tokens for all state-changing operations
 - **CORS Security**: Whitelist-based CORS (no wildcards)
@@ -103,12 +104,11 @@ xeetapus/
 ├── frontend/
 │   ├── src/                   # React source code
 │   ├── dist/                  # Built files (production)
-│   ├── package.json           # Node dependencies
+│   ├── package.json           # Bun package manifest
 │   ├── vite.config.ts         # Vite configuration
 │   └── .env.example           # Environment variables template
 ├── justfile                   # Task runner commands
 ├── SECURITY.md                # Security documentation
-├── SECURITY_HARDENING.md      # Security implementation summary
 ├── LICENSE                    # AGPL3+ License
 └── README.md
 ```
@@ -117,7 +117,7 @@ xeetapus/
 
 - Zig 0.14.0 or later
 - SQLite3 (development library)
-- Node.js 18+ and npm
+- Bun 1.2+ for the frontend toolchain
 - A C compiler (for Zig SQLite bindings)
 - [Just](https://github.com/casey/just) task runner (recommended)
 
@@ -171,8 +171,8 @@ zig build
 **Frontend:**
 ```bash
 cd frontend
-npm install
-npm run build
+bun install
+bun run build
 ```
 
 ## Configuration
@@ -201,11 +201,19 @@ XEETAPUS_PORT=8080
 # Database path
 XEETAPUS_DB_PATH=xeetapus.db
 
+# Media storage directory
+XEETAPUS_MEDIA_PATH=/var/www/xeetapus/media
+
 # CORS allowed origins (comma-separated)
 XEETAPUS_ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173
 
-# Password hashing cost (default: 12, higher = more secure but slower)
-XEETAPUS_BCRYPT_COST=12
+# Request binding address
+XEETAPUS_BIND_ADDR=0.0.0.0
+
+# Password hashing parameters (Argon2id)
+XEETAPUS_ARGON2_TIME_COST=3
+XEETAPUS_ARGON2_MEMORY_COST=65536
+XEETAPUS_ARGON2_PARALLELISM=4
 
 # Maximum request size in bytes (default: 10MB)
 XEETAPUS_MAX_REQUEST_SIZE=10485760
@@ -213,6 +221,10 @@ XEETAPUS_MAX_REQUEST_SIZE=10485760
 # Rate limiting
 XEETAPUS_RATE_LIMIT_REQUESTS=100
 XEETAPUS_RATE_LIMIT_WINDOW=60
+
+# Authentication rate limiting
+XEETAPUS_AUTH_RATE_LIMIT_REQUESTS=5
+XEETAPUS_AUTH_RATE_LIMIT_WINDOW=300
 
 # Monero Configuration
 # Required for payment functionality
@@ -265,14 +277,14 @@ zig build run
 **Start the Frontend (Development):**
 ```bash
 cd frontend
-npm run dev
+bun run dev
 # Frontend on port 3000
 ```
 
 **Build Frontend for Production:**
 ```bash
 cd frontend
-npm run build
+bun run build
 # Serves static files from backend on port 8080
 ```
 
@@ -354,6 +366,8 @@ CMD ["./xeetapus-backend"]
 ### Users
 - `GET /api/users/:username` - Get user profile
 - `GET /api/users/:username/posts` - Get user's posts
+- `GET /api/users/:username/replies` - Get user's replies
+- `GET /api/users/:username/media` - Get user's media posts
 - `POST /api/users/:username/follow` - Follow a user
 - `DELETE /api/users/:username/follow` - Unfollow a user
 - `GET /api/users/:username/followers` - Get followers list
@@ -376,6 +390,14 @@ CMD ["./xeetapus-backend"]
 ### Search
 - `GET /api/search/users?q=query` - Search users
 - `GET /api/search/posts?q=query` - Search posts
+
+### AI / LLM
+- `GET /api/llm/providers` - List supported LLM providers
+- `GET /api/llm/configs` - Get saved provider settings
+- `PUT /api/llm/configs/:provider` - Save provider settings
+- `DELETE /api/llm/configs/:provider` - Remove provider settings
+- `POST /api/llm/configs/:provider/reveal` - Reveal a saved API key
+- `POST /api/llm/chat` - Chat with a configured provider
 
 ### Communities
 - `GET /api/communities` - List communities
@@ -501,15 +523,15 @@ zig build test         # Run tests
 
 ### Frontend Development
 
-The frontend uses Vite for fast development:
+The frontend uses Vite and Bun for fast development:
 
 ```bash
 cd frontend
-npm install            # Install dependencies
-npm run dev            # Start dev server with hot reload
-npm run build          # Build for production
-npm run preview        # Preview production build
-npm run test           # Run tests
+bun install            # Install dependencies
+bun run dev            # Start dev server with hot reload
+bun run build          # Build for production
+bun run preview        # Preview production build
+bun run test           # Run tests
 ```
 
 ### Code Style
@@ -523,7 +545,7 @@ npm run test           # Run tests
 Xeetapus has been hardened for production use with comprehensive security measures. Key highlights:
 
 - ✅ No hardcoded secrets
-- ✅ Secure password hashing (PBKDF2-inspired)
+- ✅ Secure password hashing (Argon2id)
 - ✅ JWT with HMAC-SHA256 signatures
 - ✅ httpOnly cookies with SameSite protection
 - ✅ CSRF protection
@@ -535,9 +557,7 @@ Xeetapus has been hardened for production use with comprehensive security measur
 - ✅ SQL injection prevention
 - ✅ Audit logging
 
-For complete security documentation, see [SECURITY.md](SECURITY.md).
-
-For implementation details, see [SECURITY_HARDENING.md](SECURITY_HARDENING.md).
+For complete security documentation, see [SECURITY.md](SECURITY.md) and the Security Implementation chapter in the manual.
 
 ## Testing Security
 
@@ -578,8 +598,8 @@ zig version  # Should be 0.14.0+
 **Frontend:**
 ```bash
 # Clean install
-rm -rf frontend/node_modules frontend/package-lock.json
-cd frontend && npm install
+rm -rf frontend/node_modules frontend/bun.lock
+cd frontend && bun install
 ```
 
 ### Runtime Issues
