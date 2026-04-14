@@ -23,6 +23,7 @@ const llm = @import("llm.zig");
 const payments = @import("payments.zig");
 
 const PUBLIC_DIR = "./dist";
+const DOCS_HTML_PATH = "./docs/texi/xeetapus.html";
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -177,6 +178,9 @@ pub fn main() !void {
 
     try server.addPublicRoute("GET", "/api/health", healthCheck);
 
+    try server.addUnlimitedRoute("GET", "/docs", redirectToDocsHtml);
+    try server.addUnlimitedRoute("GET", "/docs.html", serveDocsHtml);
+
     // Register static file handler as fallback for unmatched routes
     // The /* path with params will match all GET requests
     try server.addPublicRoute("GET", "/*", serveStaticFiles);
@@ -188,6 +192,11 @@ pub fn main() !void {
 fn healthCheck(_: std.mem.Allocator, _: *http.Request, res: *http.Response) !void {
     res.headers.put("Content-Type", "application/json") catch {};
     try res.append("{\"status\":\"ok\",\"service\":\"xeetapus\"}");
+}
+
+fn redirectToDocsHtml(_: std.mem.Allocator, _: *http.Request, res: *http.Response) !void {
+    res.status = 301;
+    res.headers.put("Location", "/docs.html") catch {};
 }
 
 fn serveStaticFiles(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response) !void {
@@ -308,6 +317,25 @@ fn serveIndexHtml(allocator: std.mem.Allocator, res: *http.Response) !void {
     defer index_file.close();
 
     const content = index_file.readToEndAlloc(allocator, 1024 * 1024) catch {
+        res.status = 500;
+        return;
+    };
+    defer allocator.free(content);
+
+    res.headers.put("Content-Type", "text/html") catch {};
+    try res.append(content);
+}
+
+fn serveDocsHtml(allocator: std.mem.Allocator, _: *http.Request, res: *http.Response) !void {
+    const docs_file = std.fs.cwd().openFile(DOCS_HTML_PATH, .{}) catch {
+        res.status = 404;
+        res.headers.put("Content-Type", "text/plain") catch {};
+        try res.append("Not Found");
+        return;
+    };
+    defer docs_file.close();
+
+    const content = docs_file.readToEndAlloc(allocator, 1024 * 1024 * 5) catch {
         res.status = 500;
         return;
     };

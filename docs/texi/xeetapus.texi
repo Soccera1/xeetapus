@@ -48,9 +48,10 @@ Texts.  A copy of the license is included in the section entitled
 @top Xeetapus
 
 Xeetapus is a fully functional social media platform featuring posts,
-comments, likes, follows, communities, direct messages, polls, and
-analytics.  The backend is written in Zig while the frontend uses React
-with TypeScript.
+comments, likes, follows, communities, direct messages, polls,
+analytics, media uploads, AI provider settings, and Monero payments.
+The backend is written in Zig while the frontend uses React with
+TypeScript.
 
 This manual describes how to install, configure, run, develop, and
 deploy Xeetapus.

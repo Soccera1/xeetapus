@@ -35,11 +35,10 @@ Version 0.14.0 or later.  The Zig compiler is available from
 Any recent version of SQLite3.  Most systems have this installed
 already.  The development libraries are required for building.
 
-@item Node.js
-Version 18 or later.  This is needed for the frontend build system.
-
-@item npm
-Version 9 or later.  This is typically included with Node.js.
+@item Bun
+Version 1.2 or later.  Bun is used for frontend installation, builds,
+and development scripts.  Installation instructions are available at
+@url{https://bun.sh/}.
 
 @item Just (optional)
 A command runner that simplifies common tasks.  Available from
@@ -202,8 +201,8 @@ To build only the frontend:
 
 @example
 cd frontend
-npm install
-npm run build
+bun install
+bun run build
 @end example
 
 @node Running
@@ -235,7 +234,7 @@ In the second terminal, start the frontend:
 
 @example
 cd frontend
-npm run dev
+bun run dev
 @end example
 
 @subsection Production Mode

@@ -45,14 +45,14 @@ login endpoint at @code{POST /api/auth/login} would be accessed as
 @section Authentication
 
 The API uses cookie-based authentication with JWT tokens.  To
-authenticate, you must first obtain a session cookie through the login
-endpoint.  The browser will then automatically include this cookie in
-subsequent requests.
+authenticate, you must first obtain an @code{auth_token} cookie through
+the login or registration endpoint.  The browser will then automatically
+include this cookie in subsequent requests.
 
 @subheading Obtaining a Session
 
 Send a POST request to @code{/api/auth/login} with valid credentials.
-Upon success, the server will set a @code{session} cookie:
+Upon success, the server will set an @code{auth_token} cookie:
 
 @example
 POST /api/auth/login
@@ -62,13 +62,15 @@ Content-Type: application/json
 @end example
 
 The response will include a @code{Set-Cookie} header containing the
-session token.
+session token.  Login and registration responses also include a
+@code{csrf_token} field in the JSON body.
 
 @subheading CSRF Protection
 
 For state-changing requests (POST, PUT, DELETE), you must include a
 CSRF token in the @code{X-CSRF-Token} header.  The CSRF token is
-returned in the response body from @code{/api/auth/me}:
+returned in the response body from @code{/api/auth/login} and
+@code{/api/auth/register}:
 
 @example
 X-CSRF-Token: 1712345678:abc123...:def456...
@@ -223,15 +225,15 @@ Register a new user account.
 
 @table @asis
 @item username
-String.  Required.  3 to 20 characters.  May contain letters, numbers,
-and underscores.  Must start with a letter.
+String.  Required.  3 to 30 characters.  May contain letters, numbers,
+underscores, and hyphens.  Must start with a letter.
 
 @item email
 String.  Required.  A valid email address.
 
 @item password
-String.  Required.  At least 8 characters.  Must contain at least one
-uppercase letter, one lowercase letter, and one digit.
+String.  Required.  At least 8 characters and at most 128.  Must contain
+at least one uppercase letter, one lowercase letter, and one digit.
 @end table
 
 @subheading Response
@@ -243,7 +245,8 @@ Returns the newly created user object with status @code{201 Created}.
   "id": 1,
   "username": "johndoe",
   "email": "john@@example.com",
-  "created_at": "2024-01-15T10:30:00Z"
+  "token": "eyJhbGciOiJIUzI1NiIs...",
+  "csrf_token": "abc123..."
 @}
 @end example
 
@@ -273,17 +276,17 @@ String.  Required.  The user's password.
 
 @subheading Response
 
-Returns the authenticated user object.  A @code{session} cookie is set.
+Returns the authenticated user object.  A signed @code{auth_token}
+cookie is set.
 
 @example
 @{
   "id": 1,
   "username": "johndoe",
   "email": "john@@example.com",
-  "display_name": "John Doe",
-  "bio": "Developer",
-  "avatar_url": null,
-  "created_at": "2024-01-15T10:30:00Z"
+  "token": "eyJhbGciOiJIUzI1NiIs...",
+  "csrf_token": "abc123...",
+  "password_migrated": false
 @}
 @end example
 
@@ -304,7 +307,7 @@ Requires authentication.
 
 @subheading Response
 
-Returns a success message.  The @code{session} cookie is cleared.
+Returns a success message.  The @code{auth_token} cookie is cleared.
 
 @deffn GET /api/auth/me
 Get the currently authenticated user.
@@ -316,7 +319,7 @@ Requires authentication.
 
 @subheading Response
 
-Returns the authenticated user object, including the CSRF token.
+Returns the authenticated user object and password migration status.
 
 @example
 @{
@@ -326,7 +329,7 @@ Returns the authenticated user object, including the CSRF token.
   "display_name": "John Doe",
   "bio": "Developer",
   "avatar_url": null,
-  "csrf_token": "abc123...",
+  "password_migration_status": "completed",
   "created_at": "2024-01-15T10:30:00Z"
 @}
 @end example
@@ -447,13 +450,17 @@ Requires authentication.  CSRF token required.
 String.  Required.  The post content.  Maximum 280 characters.
 
 @item media_urls
-Array of strings.  Optional.  URLs of attached media.
+String.  Optional.  Comma-separated URLs of attached media.
 
 @item reply_to_id
 Integer.  Optional.  The ID of the post being replied to.
 
-@item community_id
-Integer.  Optional.  The ID of the community to post in.
+@item quote_to_id
+Integer.  Optional.  The ID of the post being quoted.
+
+@item poll
+Object.  Optional.  Poll data with @code{question}, @code{options},
+and @code{duration_minutes}.
 @end table
 
 @subheading Response
@@ -759,7 +766,8 @@ Requires authentication.  CSRF token required.
 @subheading Request
 
 The request must use @code{multipart/form-data} encoding with the file
-in a field named @code{file}.
+in a field named @code{file}.  An optional @code{is_profile} field can
+be included with the value @code{true} when uploading a profile image.
 
 @subheading Response
 

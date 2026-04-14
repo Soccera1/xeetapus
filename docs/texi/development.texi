@@ -29,7 +29,7 @@ code and installing prerequisites.  The following is a brief summary:
 
 @enumerate
 @item
-Install Zig 0.14.0 or later, SQLite, Node.js 18+, and npm 9+.
+Install Zig 0.14.0 or later, SQLite, and Bun 1.2+.
 
 @item
 Optionally install Just for simplified task management.
@@ -38,7 +38,7 @@ Optionally install Just for simplified task management.
 Clone the repository.
 
 @item
-Install frontend dependencies: @code{cd frontend && npm install}
+Install frontend dependencies: @code{cd frontend && bun install}
 
 @item
 Copy and configure environment files: @code{cp backend/.env.example backend/.env}
@@ -327,13 +327,13 @@ Frontend tests use Vitest and React Testing Library:
 
 @example
 cd frontend
-npm run test
+bun run test
 @end example
 
 Run tests in watch mode:
 
 @example
-npm run test -- --watch
+bun run test -- --watch
 @end example
 
 @node Database Development
@@ -462,13 +462,13 @@ Run frontend tests:
 
 @example
 cd frontend
-npm run test
+bun run test
 @end example
 
 Run with coverage:
 
 @example
-npm run test:coverage
+bun run test:coverage
 @end example
 
 @node Code Quality
@@ -483,7 +483,7 @@ The frontend uses ESLint for static analysis:
 
 @example
 cd frontend
-npm run lint
+bun run lint
 @end example
 
 @subsection Type Checking
@@ -493,7 +493,7 @@ type checking:
 
 @example
 cd frontend
-npm run build
+bun run build
 @end example
 
 @subsection Formatting
@@ -640,8 +640,8 @@ just build
 For the frontend specifically:
 
 @example
-rm -rf frontend/node_modules frontend/package-lock.json
-cd frontend && npm install
+rm -rf frontend/node_modules
+cd frontend && bun install
 @end example
 
 @subsection Database Locked
@@ -664,7 +664,7 @@ rm backend/xeetapus.db-wal backend/xeetapus.db-shm 2>/dev/null
 If you encounter missing module errors:
 
 @example
-cd frontend && npm install
+cd frontend && bun install
 @end example
 
 @cindex development

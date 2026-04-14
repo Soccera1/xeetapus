@@ -38,6 +38,9 @@ The database schema is versioned through a migration system.  Migrations
 are applied automatically when the server starts.  New schema changes are
 recorded as migrations in the source code.
 
+The current schema also includes quote posts, pinned posts, post view
+analytics, per-user LLM provider settings, and Monero payment tables.
+
 @node Users Table
 @section Users Table
 
@@ -48,9 +51,9 @@ The @code{users} table stores user account information.
 @multitable @columnfractions 0.2 0.15 0.25 0.4
 @headitem Column @tab Type @tab Constraints @tab Description
 @item id @tab INTEGER @tab PRIMARY KEY AUTOINCREMENT @tab Unique user ID
-@item username @tab TEXT @tab UNIQUE, NOT NULL @tab Username (3-20 chars)
+@item username @tab TEXT @tab UNIQUE, NOT NULL @tab Username (3-30 chars)
 @item email @tab TEXT @tab UNIQUE, NOT NULL @tab Email address
-@item password_hash @tab TEXT @tab NOT NULL @tab PBKDF2 hash of password
+@item password_hash @tab TEXT @tab NOT NULL @tab Argon2id hash of password
 @item display_name @tab TEXT @tab @tab Public display name
 @item bio @tab TEXT @tab @tab User biography
 @item avatar_url @tab TEXT @tab @tab URL to avatar image
@@ -64,7 +67,7 @@ ensure fast lookups during authentication and profile retrieval.
 
 @example
 INSERT INTO users (username, email, password_hash)
-VALUES ('johndoe', 'john@@example.com', '$pbkdf2-sha256$...');
+VALUES ('johndoe', 'john@@example.com', '$argon2id$v=19$...');
 @end example
 
 @node Posts Table
@@ -79,10 +82,12 @@ The @code{posts} table stores user-generated content.
 @item id @tab INTEGER @tab PRIMARY KEY AUTOINCREMENT @tab Unique post ID
 @item user_id @tab INTEGER @tab NOT NULL, FK(users.id) @tab Author's user ID
 @item content @tab TEXT @tab NOT NULL @tab Post content (max 280 chars)
-@item media_urls @tab TEXT @tab @tab JSON array of media URLs
+@item media_urls @tab TEXT @tab @tab Comma-separated media URLs
 @item reply_to_id @tab INTEGER @tab FK(posts.id) @tab Parent post (for replies)
+@item quote_to_id @tab INTEGER @tab FK(posts.id) @tab Quoted post (optional)
 @item poll_id @tab INTEGER @tab FK(polls.id) @tab Attached poll (optional)
 @item created_at @tab DATETIME @tab DEFAULT CURRENT_TIMESTAMP @tab Creation time
+@item updated_at @tab DATETIME @tab DEFAULT CURRENT_TIMESTAMP @tab Last update time
 @end multitable
 @end float
 
@@ -96,7 +101,11 @@ Regular posts containing text content.
 Replies to other posts (indicated by @code{reply_to_id}).
 
 @item
-Posts with attached media (stored as a JSON array in @code{media_urls}).
+Posts with attached media (stored as a comma-separated string in
+@code{media_urls}).
+
+@item
+Quote posts referencing another post via @code{quote_to_id}.
 
 @item
 Posts with attached polls (indicated by @code{poll_id}).
@@ -223,7 +232,7 @@ The @code{messages} table stores direct messages between users.
 @item conversation_id @tab INTEGER @tab NOT NULL, FK(conversations.id) @tab Conversation
 @item sender_id @tab INTEGER @tab NOT NULL, FK(users.id) @tab Sender user ID
 @item content @tab TEXT @tab NOT NULL @tab Message content
-@item media_urls @tab TEXT @tab @tab JSON array of media URLs
+@item media_urls @tab TEXT @tab @tab Comma-separated media URLs
 @item read @tab INTEGER @tab DEFAULT 0 @tab Read status (0 = unread, 1 = read)
 @item created_at @tab DATETIME @tab DEFAULT CURRENT_TIMESTAMP @tab Send time
 @end multitable
@@ -324,7 +333,7 @@ The @code{drafts} table stores unpublished post drafts.
 @item id @tab INTEGER @tab PRIMARY KEY AUTOINCREMENT @tab Unique draft ID
 @item user_id @tab INTEGER @tab NOT NULL, FK(users.id) @tab Author
 @item content @tab TEXT @tab NOT NULL @tab Draft content
-@item media_urls @tab TEXT @tab @tab JSON array of media URLs
+@item media_urls @tab TEXT @tab @tab Comma-separated media URLs
 @item created_at @tab DATETIME @tab DEFAULT CURRENT_TIMESTAMP @tab Creation time
 @end multitable
 @end float
@@ -343,7 +352,7 @@ The @code{llm_provider_configs} table stores per-user AI provider settings.
 @item id @tab INTEGER @tab PRIMARY KEY AUTOINCREMENT @tab Unique config ID
 @item user_id @tab INTEGER @tab NOT NULL, FK(users.id) @tab User
 @item provider @tab TEXT @tab NOT NULL @tab Provider name
-@item api_key @tab TEXT @tab NOT NULL @tab Encrypted API key
+@item api_key @tab TEXT @tab NOT NULL @tab Stored API key
 @item model @tab TEXT @tab NOT NULL @tab Model name
 @item base_url @tab TEXT @tab @tab Custom API URL (optional)
 @item is_default @tab INTEGER @tab DEFAULT 0 @tab Default provider flag

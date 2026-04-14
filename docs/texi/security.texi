@@ -33,9 +33,9 @@ The following table summarizes the security features:
 
 @multitable @columnfractions 0.3 0.35 0.15 0.2
 @headitem Feature @tab Implementation @tab Default @tab Status
-@item Password hashing @tab PBKDF2-HMAC-SHA256 @tab 32,768 iterations @tab Enabled
-@item JWT tokens @tab HMAC-SHA256 signed @tab 7 day expiry @tab Enabled
-@item Session cookies @tab HttpOnly, Secure, SameSite=Lax @tab Varies @tab Enabled
+@item Password hashing @tab Argon2id @tab Configurable time/memory/parallelism @tab Enabled
+@item JWT tokens @tab HMAC-SHA256 signed @tab 24 hour expiry @tab Enabled
+@item Session cookies @tab @code{auth_token}, HttpOnly, Secure, SameSite=Lax @tab 24 hours @tab Enabled
 @item CSRF tokens @tab HMAC-SHA256 signed @tab 24 hour expiry @tab Enabled
 @item Rate limiting @tab IP-based sliding window @tab 100/minute @tab Enabled
 @item CORS @tab Whitelist-based origins @tab localhost only @tab Enabled
@@ -54,8 +54,8 @@ accidentally weakened.
 @node Password Security
 @section Password Security
 
-User passwords are protected using PBKDF2-HMAC-SHA256, a key derivation
-function recommended by OWASP for password storage.
+User passwords are protected using Argon2id, a memory-hard password
+hashing function recommended for modern password storage.
 
 @subheading How It Works
 
@@ -67,12 +67,12 @@ occurs:
 A cryptographically random 32-byte salt is generated.
 
 @item
-The password is combined with the salt and hashed using PBKDF2 with
-32,768 iterations (configurable).
+The password is hashed with Argon2id using configurable time, memory,
+and parallelism parameters.
 
 @item
-The resulting hash is stored in the database along with the salt and
-iteration count.
+The resulting encoded hash is stored in the database.  Older PBKDF2 and
+legacy SHA-256 hashes are still recognized for migration purposes.
 
 @item
 During login, the stored parameters are retrieved, the same computation
@@ -85,12 +85,11 @@ using constant-time comparison.
 Password hashes are stored in the following format:
 
 @example
-$pbkdf2-sha256$v2$32768$<base64(salt)>$<base64(hash)>
+$argon2id$v=19$m=65536,t=3,p=4$<salt>$<hash>
 @end example
 
-This format includes the algorithm version, iteration count, salt, and
-hash, allowing future algorithm upgrades while maintaining backward
-compatibility.
+This format includes the algorithm version and tunable parameters,
+allowing future upgrades while maintaining backward compatibility.
 
 @subheading Strength Requirements
 
@@ -114,13 +113,15 @@ These requirements are enforced during registration and password changes.
 
 @subheading Production Recommendations
 
-For production deployments, consider increasing the PBKDF2 iteration count
-to 60,000 or higher.  This increases the computational cost for
-attackers attempting to crack passwords but has minimal impact on normal
-login performance:
+For production deployments, consider increasing the Argon2id cost
+parameters to fit your hardware and threat model.  Higher memory and
+time costs slow down offline cracking attempts while keeping normal
+logins practical:
 
 @example
-XEETAPUS_PBKDF2_ITERATIONS=60000
+XEETAPUS_ARGON2_TIME_COST=4
+XEETAPUS_ARGON2_MEMORY_COST=131072
+XEETAPUS_ARGON2_PARALLELISM=4
 @end example
 
 @node Token Authentication
@@ -169,7 +170,8 @@ HMAC-SHA256(secret, base64(header).base64(payload))
 
 @subheading Token Validation
 
-When a request arrives with a session cookie, the server:
+When a request arrives with an @code{auth_token} cookie or a bearer
+token, the server:
 
 @enumerate
 @item
@@ -190,7 +192,7 @@ Checks that the expiration time has not passed.
 
 @item
 If all checks pass, the user ID from the payload is used to load the
-user's session.
+user.
 @end enumerate
 
 If any check fails, the request is rejected with a @code{401 Unauthorized}
@@ -203,11 +205,11 @@ Sessions are managed using HTTP cookies with security attributes.
 
 @subheading Cookie Attributes
 
-The session cookie is set with the following attributes:
+The auth cookie is set with the following attributes:
 
 @table @asis
 @item Name
-@code{session}
+@code{auth_token}
 
 @item HttpOnly
 When enabled, the cookie cannot be accessed by JavaScript.  This prevents
@@ -224,13 +226,13 @@ subsequent GET requests.  This provides some CSRF protection while
 maintaining usability.
 
 @item Max-Age
-The cookie expires after 7 days (604800 seconds) of inactivity.
+The cookie expires after 24 hours (86400 seconds).
 @end table
 
 @subheading Session Expiry
 
-Sessions expire automatically after 7 days of inactivity.  When a session
-expires, the user must log in again to obtain a new session token.
+Sessions expire automatically after 24 hours.  When a session expires,
+the user must log in again to obtain a new session token.
 
 @node CSRF Protection
 @section CSRF Protection
@@ -245,8 +247,8 @@ Xeetapus protects against CSRF using signed tokens.
 
 @enumerate
 @item
-When a user logs in, the server generates a CSRF token and includes it
-in the login response.
+When a user logs in or registers, the server generates a CSRF token and
+includes it in the response body.
 
 @item
 The token is a string in the format:
@@ -269,9 +271,9 @@ that the timestamp is recent (within 24 hours).
 
 @subheading Token Refresh
 
-CSRF tokens expire after 24 hours.  The frontend should periodically
-refresh the token by calling @code{GET /api/auth/me}, which returns a
-fresh CSRF token in the response.
+CSRF tokens expire after 24 hours.  The frontend should keep the token
+returned from the most recent login or registration response.  If the
+token is lost or has expired, the user must authenticate again.
 
 @subheading When CSRF is Required
 
