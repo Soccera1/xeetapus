@@ -1,0 +1,99 @@
+#!/sbin/openrc-run
+# Xeetapus OpenRC init script
+# Place in /etc/init.d/xeetapus
+# Usage: rc-service xeetapus start|stop|restart|status
+
+description="Xeetapus social media application"
+
+: ${XEETAPUS_USER:=nginx}
+: ${XEETAPUS_GROUP:=nginx}
+: ${XEETAPUS_DIR:=/var/www/xeetapus}
+: ${XEETAPUS_LOG:=/var/log/xeetapus.log}
+
+command="${XEETAPUS_DIR}/xeetapus-backend"
+command_args=""
+command_user="${XEETAPUS_USER}:${XEETAPUS_GROUP}"
+command_background=true
+pidfile="/run/xeetapus.pid"
+
+# Load environment from .env file if it exists
+load_env() {
+    if [ -f "${XEETAPUS_DIR}/.env" ]; then
+        # Shell-source the env file so all variables are exported cleanly.
+        # The production .env is a simple KEY=VALUE file with comments.
+        set -a
+        . "${XEETAPUS_DIR}/.env"
+        set +a
+    fi
+}
+
+start_pre() {
+    # Check if binary exists
+    if [ ! -x "$command" ]; then
+        eerror "Xeetapus binary not found at $command"
+        eerror "Run the deploy script first"
+        return 1
+    fi
+
+    # Load environment variables
+    load_env
+
+    # Set defaults if not in .env
+    export XEETAPUS_ENV=${XEETAPUS_ENV:-production}
+    export XEETAPUS_PORT=${XEETAPUS_PORT:-8080}
+    export XEETAPUS_DB_PATH=${XEETAPUS_DB_PATH:-${XEETAPUS_DIR}/xeetapus.db}
+    export XEETAPUS_MEDIA_PATH=${XEETAPUS_MEDIA_PATH:-${XEETAPUS_DIR}/media}
+
+    # Make sure the service user can write its state directories.
+    db_dir=$(dirname "$XEETAPUS_DB_PATH")
+    mkdir -p "$db_dir" "$XEETAPUS_MEDIA_PATH"
+    chown -R "$XEETAPUS_USER:$XEETAPUS_GROUP" "$db_dir" "$XEETAPUS_MEDIA_PATH"
+
+    # Ensure log file exists and is writable
+    touch "$XEETAPUS_LOG"
+    chown "$XEETAPUS_USER:$XEETAPUS_GROUP" "$XEETAPUS_LOG"
+    chmod 0640 "$XEETAPUS_LOG"
+
+    return 0
+}
+
+start() {
+    ebegin "Starting Xeetapus"
+
+    start-stop-daemon --start \
+        --background \
+        --make-pidfile \
+        --pidfile "$pidfile" \
+        --chdir "$XEETAPUS_DIR" \
+        --user "$XEETAPUS_USER:$XEETAPUS_GROUP" \
+        --stdout "$XEETAPUS_LOG" \
+        --stderr "$XEETAPUS_LOG" \
+        --exec "$command" \
+        -- $command_args
+
+    eend $?
+}
+
+stop() {
+    ebegin "Stopping Xeetapus"
+    start-stop-daemon --stop --pidfile "$pidfile"
+    rm -f "$pidfile"
+    eend $?
+}
+
+status() {
+    if [ -f "$pidfile" ]; then
+        PID=$(cat "$pidfile")
+        if kill -0 "$PID" 2>/dev/null; then
+            einfo "Xeetapus is running (PID: $PID)"
+            return 0
+        else
+            ewarn "PID file exists but process is not running"
+            rm -f "$pidfile"
+            return 1
+        fi
+    else
+        einfo "Xeetapus is not running"
+        return 1
+    fi
+}

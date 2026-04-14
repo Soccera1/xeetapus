@@ -58,9 +58,6 @@ coverage/
 # Testing
 *.test
 
-# Deploy
-deploy/
-
 # Codex
 .codex
 
