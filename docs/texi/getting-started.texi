@@ -9,6 +9,7 @@ development or evaluation purposes.
 * System Requirements::          What you need to run Xeetapus.
 * Obtaining the Source::         Downloading Xeetapus.
 * Installing Prerequisites::      Setting up required software.
+* Bootstrap Build::              Building dependencies from source.
 * Initial Configuration::        Preparing the environment files.
 * Building::                     Compiling Xeetapus.
 * Running::                       Starting the application.
@@ -62,6 +63,7 @@ After cloning, the directory structure should look something like this:
 @example
 xeetapus/
 ├── backend/          # Zig backend source
+├── bootstrap/        # Bootstrap build system
 ├── frontend/         # React frontend source
 ├── deploy/           # Deployment scripts and configurations
 ├── docs/             # Documentation
@@ -69,7 +71,7 @@ xeetapus/
 @end example
 
 @node Installing Prerequisites
-@subsection Installing Prerequisites
+@section Installing Prerequisites
 
 The installation process differs depending on your operating system.
 The following subsections describe how to install the prerequisites
@@ -114,6 +116,76 @@ brew install sqlite just
 @end example
 
 Most macOS systems already have SQLite installed.
+
+@node Bootstrap Build
+@section Bootstrap Build
+
+Xeetapus includes a bootstrap system that builds all required dependencies
+from source if they are not already installed on your system.  This is useful
+for systems that lack pre-built packages or when you need a specific version
+of a dependency.
+
+The bootstrap system is located in the @file{bootstrap/} directory and can
+build the following components:
+
+@table @asis
+@item GMP
+GNU Multiple Precision Arithmetic Library.
+
+@item MPFR
+GNU MPFR Library for accurate floating-point calculations.
+
+@item MPC
+GNU MPC Library for complex arithmetic.
+
+@item SQLite
+The database engine.
+
+@item NCurses
+Terminal UI library.
+
+@item Perl
+Used for build tooling.
+
+@item Texinfo
+Documentation generation.
+
+@item GCC (C11)
+C compiler for building Zig.
+
+@item Zig (Stage 0)
+Bootstrap compiler for building the main Zig compiler.
+@end table
+
+@subheading Running Bootstrap
+
+To build all missing dependencies:
+
+@example
+./bootstrap/bootstrap.sh
+@end example
+
+To see what would be built without actually building:
+
+@example
+./bootstrap/bootstrap.sh --pretend
+@end example
+
+The bootstrap process downloads and builds each dependency from source,
+installing them into @file{bootstrap/cache/local/}.  This takes
+considerable time but only needs to be done once.
+
+@subheading Using Bootstrap Dependencies
+
+After running the bootstrap, the dependencies are available in the local
+cache.  Set the following environment variable to use them:
+
+@example
+export PATH="$PWD/bootstrap/cache/local/bin:$PATH"
+@end example
+
+This allows the build system to find the locally-built versions of
+libraries and tools.
 
 @node Initial Configuration
 @section Initial Configuration
