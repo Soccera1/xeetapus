@@ -20,6 +20,7 @@ import { SettingsPage } from './pages/SettingsPage';
 import { HashtagPage } from './pages/HashtagPage';
 import { PostDetailPage } from './pages/PostDetailPage';
 import { DonatePage } from './pages/DonatePage';
+import { StatusPage } from './pages/StatusPage';
 import './index.css';
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
@@ -204,6 +205,7 @@ function AppContent() {
                             </PrivateRoute>
                         } 
                     />
+                    <Route path="/status" element={<StatusPage />} />
                     <Route path="*" element={<Navigate to="/" replace />} />
                 </Routes>
             </main>

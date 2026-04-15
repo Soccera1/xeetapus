@@ -44,7 +44,7 @@ pub const Response = struct {
 
     pub fn json(self: *Response, data: anytype) !void {
         self.headers.put("Content-Type", "application/json") catch {};
-        try std.json.stringify(data, .{}, self.body.writer());
+        try std.json.stringify(data, .{}, self.body.writer(self.allocator));
     }
 
     pub fn text(self: *Response, content: []const u8) !void {

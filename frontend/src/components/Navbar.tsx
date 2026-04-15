@@ -3,9 +3,9 @@ import { useAuth } from '../context/AuthContext';
 import { useEffect, useState } from 'react';
 import { api } from '../api';
 import { Button } from '@/components/ui/button';
-import { 
+import {
     Search, Bell, Users, MessageCircle, List, TrendingUp, 
-    FileText, Calendar, BarChart3, Settings, MoreHorizontal, X
+    FileText, Calendar, BarChart3, Settings, MoreHorizontal, X, Server
 } from 'lucide-react';
 
 export function Navbar() {
@@ -46,6 +46,7 @@ export function Navbar() {
         { icon: FileText, label: 'Drafts', path: '/drafts' },
         { icon: Calendar, label: 'Scheduled', path: '/scheduled' },
         { icon: BarChart3, label: 'Analytics', path: '/analytics' },
+        { icon: Server, label: 'Status', path: '/status' },
         { icon: Settings, label: 'Settings', path: '/settings' },
     ];
 

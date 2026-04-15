@@ -223,6 +223,23 @@ export interface UserAnalytics {
     total_reposts_received: number;
 }
 
+export interface HealthCheck {
+    status: string;
+    service: string;
+    response_ms: number;
+    checked_at: string;
+}
+
+export interface HealthStatus {
+    status: string;
+    service: string;
+    checked_at: string;
+    response_ms: number;
+    uptime_percentage: number;
+    checks: number;
+    history: HealthCheck[];
+}
+
 // Blocked/Muted Users
 export interface BlockedUser {
     id: number;

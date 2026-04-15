@@ -203,6 +203,22 @@ export function createMockFetch(overrides: Record<string, any> = {}) {
       'POST:/auth/register': mockUser,
       'POST:/auth/logout': { deleted: true },
       'GET:/auth/me': mockUser,
+      'GET:/health': {
+        status: 'ok',
+        service: 'xeetapus',
+        checked_at: '2024-01-01 00:00:00',
+        response_ms: 5,
+        uptime_percentage: 100,
+        checks: 1,
+        history: [
+          {
+            status: 'ok',
+            service: 'xeetapus',
+            checked_at: '2024-01-01 00:00:00',
+            response_ms: 5,
+          },
+        ],
+      },
       'GET:/posts': [mockPost],
       'GET:/posts/\\d+': mockPost,
       'DELETE:/posts/\\d+': { deleted: true },
