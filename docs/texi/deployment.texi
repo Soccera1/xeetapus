@@ -59,8 +59,8 @@ A valid SSL/TLS certificate is required for HTTPS.  Let's Encrypt
 provides free certificates.
 
 @item Init System
-systemd (most Linux distributions) or OpenRC (Gentoo, Alpine).  The
-appropriate init script is included with Xeetapus.
+OpenRC (Gentoo, Alpine).  The appropriate init script is included with
+Xeetapus.  Contributions for other init systems are welcome.
 @end table
 
 @node Building for Production
@@ -321,39 +321,7 @@ Then update the nginx configuration to reference these files.
 Run Xeetapus as a system service so it starts automatically and can be
 managed with standard commands.
 
-@subheading systemd (Most Linux Distributions)
-
-Create a systemd service file at
-@file{/etc/systemd/system/xeetapus.service}:
-
-@verbatim
-[Unit]
-Description=Xeetapus Social Media Platform
-After=network.target
-
-[Service]
-Type=simple
-User=xeetapus
-Group=xeetapus
-WorkingDirectory=/var/www/xeetapus
-EnvironmentFile=/var/www/xeetapus/.env
-ExecStart=/var/www/xeetapus/xeetapus-backend
-Restart=on-failure
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
-@end verbatim
-
-Then enable and start the service:
-
-@example
-sudo systemctl daemon-reload
-sudo systemctl enable xeetapus
-sudo systemctl start xeetapus
-@end example
-
-@subheading OpenRC (Gentoo, Alpine Linux)
+@subheading OpenRC (Most Linux Distributions)
 
 Install the provided init script:
 
@@ -383,11 +351,11 @@ sudo rc-service xeetapus start
 Common service management commands:
 
 @example
-sudo systemctl start xeetapus    # Start the service
-sudo systemctl stop xeetapus     # Stop the service
-sudo systemctl restart xeetapus  # Restart the service
-sudo systemctl status xeetapus   # Check status
-sudo journalctl -u xeetapus      # View logs
+sudo rc-service xeetapus start   # Start the service
+sudo rc-service xeetapus stop    # Stop the service
+sudo rc-service xeetapus restart # Restart the service
+sudo rc-service xeetapus status  # Check status
+sudo tail -f /var/log/xeetapus.log  # View logs
 @end example
 
 @node Database Management
@@ -418,7 +386,7 @@ To restore from a backup:
 @item
 Stop the service:
 @example
-sudo systemctl stop xeetapus
+sudo rc-service xeetapus stop
 @end example
 
 @item
@@ -430,7 +398,7 @@ cp /var/backups/xeetapus-20240115.db /var/www/xeetapus/xeetapus.db
 @item
 Restart the service:
 @example
-sudo systemctl start xeetapus
+sudo rc-service xeetapus start
 @end example
 @end enumerate
 
@@ -597,7 +565,7 @@ Create a full backup:
 @item
 Stop the service:
 @example
-sudo systemctl stop xeetapus
+sudo rc-service xeetapus stop
 @end example
 
 @item
@@ -626,7 +594,7 @@ on startup, but review the release notes for any manual steps.
 @item
 Start the service:
 @example
-sudo systemctl start xeetapus
+sudo rc-service xeetapus start
 @end example
 
 @item
@@ -646,7 +614,7 @@ This section addresses common deployment issues.
 Check the logs for error messages:
 
 @example
-sudo journalctl -u xeetapus -n 50
+sudo tail -100 /var/log/xeetapus.log
 @end example
 
 Verify the configuration file is readable:
@@ -687,7 +655,7 @@ sudo netstat -tlnp | grep 8080
 Check if the service is running:
 
 @example
-sudo systemctl status xeetapus
+sudo rc-service xeetapus status
 @end example
 
 Test the API directly:

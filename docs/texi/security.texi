@@ -7,12 +7,12 @@ numerous protections are in place to safeguard user data and prevent
 unauthorized access.
 
 @menu
-* Overview::                    Summary of security features.
+* Security Overview::           Summary of security features.
 * Password Security::          How passwords are protected.
 * Token Authentication::       JWT token implementation.
 * Session Management::         Cookie security settings.
 * CSRF Protection::            Preventing cross-site request forgery.
-* Rate Limiting::               Limiting request frequency.
+* Rate Limit Sec::               Limiting request frequency.
 * CORS Policy::                 Controlling cross-origin access.
 * Security Headers::           HTTP security headers.
 * Input Validation::            Sanitizing user input.

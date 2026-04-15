@@ -144,7 +144,7 @@ application features.
 @end table
 
 @node HTTP Server
-@subsection HTTP Server
+@section HTTP Server
 
 The HTTP server is implemented from scratch in Zig rather than using an
 existing framework.  This provides several advantages:
@@ -177,7 +177,7 @@ The server extracts these values and passes them to handlers.
 @end table
 
 @node Database Layer
-@subsection Database Layer
+@section Database Layer
 
 The database layer abstracts SQLite operations behind a simple interface.
 It handles connection management, query execution, and schema
