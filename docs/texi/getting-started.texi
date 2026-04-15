@@ -53,13 +53,9 @@ If you have not already obtained the Xeetapus source code, clone the
 repository using Git:
 
 @example
-git clone <repository-url>
+git clone https://github.com/soccera1/xeetapus.git
 cd xeetapus
 @end example
-
-Replace @code{<repository-url>} with the actual URL of the Xeetapus
-repository.  If you are reading this documentation as part of a
-local source tree, the repository is already available.
 
 After cloning, the directory structure should look something like this:
 

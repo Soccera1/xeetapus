@@ -28,7 +28,7 @@ describe('App Component', () => {
 
       render(<App />);
 
-      expect(screen.getByText('Xeetapus')).toBeInTheDocument();
+      expect(screen.getByAltText('Xeetapus')).toBeInTheDocument();
       expect(screen.getByText('Join the conversation')).toBeInTheDocument();
     });
 

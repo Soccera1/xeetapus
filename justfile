@@ -32,6 +32,7 @@ build-backend:
     @echo "📦 Building Zig backend..."
     @mkdir -p /tmp/zig-cache-$(id -u) /tmp/zig-global-cache-$(id -u)
     @just docs-html-single
+    @just docs-html-split-embed
     @cd backend && env ZIG_LOCAL_CACHE_DIR=/tmp/zig-cache-$(id -u) ZIG_GLOBAL_CACHE_DIR=/tmp/zig-global-cache-$(id -u) zig build
     @echo "✅ Backend build complete!"
 
@@ -40,6 +41,7 @@ build-backend-release:
     @echo "📦 Building release Zig backend..."
     @mkdir -p /tmp/zig-cache-$(id -u) /tmp/zig-global-cache-$(id -u)
     @just docs-html-single
+    @just docs-html-split-embed
     @cd backend && env ZIG_LOCAL_CACHE_DIR=/tmp/zig-cache-$(id -u) ZIG_GLOBAL_CACHE_DIR=/tmp/zig-global-cache-$(id -u) zig build -Doptimize=ReleaseFast
     @echo "✅ Release backend build complete!"
 
@@ -127,6 +129,35 @@ docs-html-single:
     @mkdir -p backend/src/generated
     @cp docs/texi/xeetapus.html backend/src/generated/docs.html
     @echo "✅ Unified HTML doc built: docs/texi/xeetapus.html"
+
+# Build split HTML docs and generate Zig embed file for backend
+docs-html-split-embed: docs-html
+    @echo "📚 Preparing split HTML docs for embedding..."
+    @rm -rf backend/src/generated/split
+    @mkdir -p backend/src/generated/split
+    @cp docs/texi/html/*.html backend/src/generated/split/
+    @echo '// Auto-generated - do not edit' > backend/src/generated/split_docs.zig
+    @echo 'const std = @import("std");' >> backend/src/generated/split_docs.zig
+    @echo '' >> backend/src/generated/split_docs.zig
+    @echo 'pub const SplitDoc = struct {' >> backend/src/generated/split_docs.zig
+    @echo '    name: []const u8,' >> backend/src/generated/split_docs.zig
+    @echo '    content: []const u8,' >> backend/src/generated/split_docs.zig
+    @echo '};' >> backend/src/generated/split_docs.zig
+    @echo '' >> backend/src/generated/split_docs.zig
+    @echo 'pub const docs = [_]SplitDoc{' >> backend/src/generated/split_docs.zig
+    @for f in backend/src/generated/split/*.html; do \
+        name=$(basename "$f"); \
+        echo "    .{ .name = \"${name}\", .content = @embedFile(\"split/${name}\") }," >> backend/src/generated/split_docs.zig; \
+    done
+    @echo '};' >> backend/src/generated/split_docs.zig
+    @echo '' >> backend/src/generated/split_docs.zig
+    @echo 'pub fn find(name: []const u8) ?[]const u8 {' >> backend/src/generated/split_docs.zig
+    @echo '    for (docs) |doc| {' >> backend/src/generated/split_docs.zig
+    @echo '        if (std.mem.eql(u8, doc.name, name)) return doc.content;' >> backend/src/generated/split_docs.zig
+    @echo '    }' >> backend/src/generated/split_docs.zig
+    @echo '    return null;' >> backend/src/generated/split_docs.zig
+    @echo '}' >> backend/src/generated/split_docs.zig
+    @echo "✅ Split HTML docs embedded in backend"
 
 # Build all documentation formats
 docs: docs-info docs-html docs-html-single

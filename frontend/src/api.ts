@@ -1,4 +1,4 @@
-import type { User, Post, Profile, Comment, Notification, LoginRequest, RegisterRequest, CreatePostRequest, CommentRequest, Community, CreateCommunityRequest, Conversation, Message, UserList, ListMember, Hashtag, PollOption, Draft, ScheduledPost, UserAnalytics, BlockedUser, MutedUser, LlmProvider, LlmConfigSummary, LlmChatMessage, LlmChatResponse, LlmProviderId, LoginResponse, ExchangeRate, CreateInvoiceRequest, Invoice, InvoiceStatus, PaymentBalance } from './types';
+import type { User, Post, Profile, Comment, Notification, LoginRequest, RegisterRequest, CreatePostRequest, CommentRequest, Community, CreateCommunityRequest, Conversation, Message, UserList, ListMember, Hashtag, PollOption, Draft, ScheduledPost, UserAnalytics, HealthStatus, BlockedUser, MutedUser, LlmProvider, LlmConfigSummary, LlmChatMessage, LlmChatResponse, LlmProviderId, LoginResponse, ExchangeRate, CreateInvoiceRequest, Invoice, InvoiceStatus, PaymentBalance } from './types';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
@@ -155,6 +155,10 @@ export class ApiClient {
 
     async me(): Promise<User> {
         return this.fetch('/auth/me');
+    }
+
+    async getHealth(): Promise<HealthStatus> {
+        return this.fetch('/health');
     }
 
     async createPost(data: CreatePostRequest): Promise<{ id: number; content: string; created: boolean }> {

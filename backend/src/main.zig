@@ -21,9 +21,11 @@ const config = @import("config.zig");
 const audit = @import("audit.zig");
 const llm = @import("llm.zig");
 const payments = @import("payments.zig");
+const health = @import("health.zig");
 
 const PUBLIC_DIR = "./dist";
 const DOCS_HTML = @embedFile("generated/docs.html");
+const split_docs = @import("generated/split_docs.zig");
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -176,10 +178,13 @@ pub fn main() !void {
     try server.addRoute("POST", "/api/payments/pay", payments.payInvoice);
     try server.addRoute("GET", "/api/payments/rate", payments.getExchangeRate);
 
-    try server.addPublicRoute("GET", "/api/health", healthCheck);
+    try server.addPublicRoute("GET", "/api/health", health.getHealth);
 
     try server.addUnlimitedRoute("GET", "/docs", redirectToDocsHtml);
     try server.addUnlimitedRoute("GET", "/docs.html", serveDocsHtml);
+    try server.addUnlimitedRoute("GET", "/docs/split", redirectToSplitDocsIndex);
+    try server.addUnlimitedRoute("GET", "/docs/split/", redirectToSplitDocsIndex);
+    try server.addPublicRoute("GET", "/docs/split/:name", serveSplitDoc);
 
     // Register static file handler as fallback for unmatched routes
     // The /* path with params will match all GET requests
@@ -189,14 +194,14 @@ pub fn main() !void {
     try server.start();
 }
 
-fn healthCheck(_: std.mem.Allocator, _: *http.Request, res: *http.Response) !void {
-    res.headers.put("Content-Type", "application/json") catch {};
-    try res.append("{\"status\":\"ok\",\"service\":\"xeetapus\"}");
-}
-
 fn redirectToDocsHtml(_: std.mem.Allocator, _: *http.Request, res: *http.Response) !void {
     res.status = 301;
     res.headers.put("Location", "/docs.html") catch {};
+}
+
+fn redirectToSplitDocsIndex(_: std.mem.Allocator, _: *http.Request, res: *http.Response) !void {
+    res.status = 301;
+    res.headers.put("Location", "/docs/split/index.html") catch {};
 }
 
 fn serveStaticFiles(allocator: std.mem.Allocator, req: *http.Request, res: *http.Response) !void {
@@ -329,6 +334,24 @@ fn serveIndexHtml(allocator: std.mem.Allocator, res: *http.Response) !void {
 fn serveDocsHtml(_: std.mem.Allocator, _: *http.Request, res: *http.Response) !void {
     res.headers.put("Content-Type", "text/html") catch {};
     try res.append(DOCS_HTML);
+}
+
+fn serveSplitDoc(_: std.mem.Allocator, req: *http.Request, res: *http.Response) !void {
+    const name = req.params.get("name") orelse {
+        res.status = 400;
+        res.headers.put("Content-Type", "text/plain") catch {};
+        try res.append("Bad Request");
+        return;
+    };
+
+    if (split_docs.find(name)) |content| {
+        res.headers.put("Content-Type", "text/html") catch {};
+        try res.append(content);
+    } else {
+        res.status = 404;
+        res.headers.put("Content-Type", "text/plain") catch {};
+        try res.append("Not Found");
+    }
 }
 
 fn getContentType(path: []const u8) []const u8 {

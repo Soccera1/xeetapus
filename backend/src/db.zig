@@ -389,6 +389,15 @@ pub fn runMigrations() !void {
         \\    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
         \\);
         ,
+        // Health checks table
+        \\CREATE TABLE IF NOT EXISTS health_checks (
+        \\    id INTEGER PRIMARY KEY AUTOINCREMENT,
+        \\    status TEXT NOT NULL,
+        \\    service TEXT NOT NULL,
+        \\    response_ms INTEGER NOT NULL DEFAULT 0,
+        \\    checked_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        \\);
+        ,
     };
 
     // Schema migrations (ALTER TABLE statements)
