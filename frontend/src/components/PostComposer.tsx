@@ -158,8 +158,8 @@ export function PostComposer({ onPostCreated, replyToId, replyToPost, quotePost 
     const initials = displayName.slice(0, 2).toUpperCase();
 
     return (
-        <Card className="mb-4">
-            <CardContent className="pt-6">
+        <Card className="mb-4 border-border/80">
+            <CardContent className="p-4 sm:p-5">
                 {replyToPost && (
                     <div className="flex items-center gap-2 text-muted-foreground text-sm mb-3">
                         <span>Replying to</span>
@@ -198,21 +198,21 @@ export function PostComposer({ onPostCreated, replyToId, replyToPost, quotePost 
                         <AvatarImage src={user?.avatar_url || undefined} />
                         <AvatarFallback>{initials}</AvatarFallback>
                     </Avatar>
-                    <div className="flex-1">
+                    <div className="min-w-0 flex-1">
                         <Textarea
                             value={content}
                             onChange={(e) => setContent(e.target.value)}
                             placeholder={replyToPost ? "Post your reply" : "What's happening?"}
                             maxLength={280}
                             rows={3}
-                            className="resize-none border-none focus-visible:ring-0 p-0 text-lg"
+                            className="min-h-[96px] resize-none border-none bg-transparent p-0 text-lg shadow-none focus-visible:ring-0"
                         />
 
                         {/* Media Preview */}
                         {mediaPreview.length > 0 && (
-                            <div className={`grid gap-2 mb-4 ${mediaPreview.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                            <div className={`mb-4 grid gap-2 ${mediaPreview.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
                                 {mediaPreview.map((preview, idx) => (
-                                    <div key={idx} className="relative rounded-lg overflow-hidden">
+                                    <div key={idx} className="relative overflow-hidden rounded-lg border bg-muted">
                                         <img src={preview} alt={`Preview ${idx + 1}`} className="w-full h-32 object-cover" />
                                         <Button
                                             variant="destructive"
@@ -229,7 +229,7 @@ export function PostComposer({ onPostCreated, replyToId, replyToPost, quotePost 
 
                         {/* Poll Creator */}
                         {showPoll && (
-                            <div className="space-y-3 mb-4 p-3 border rounded-lg bg-muted/30">
+                            <div className="mb-4 space-y-3 rounded-lg border bg-muted/40 p-3">
                                 <div className="flex items-center justify-between">
                                     <span className="font-medium">Create a poll</span>
                                     <Button variant="ghost" size="sm" onClick={() => setShowPoll(false)}>
@@ -266,7 +266,7 @@ export function PostComposer({ onPostCreated, replyToId, replyToPost, quotePost 
                                     <select
                                         value={pollDuration}
                                         onChange={(e) => setPollDuration(Number(e.target.value))}
-                                        className="bg-background border rounded px-2 py-1 text-sm"
+                                        className="rounded-md border bg-card px-2 py-1 text-sm"
                                     >
                                         <option value={5}>5 minutes</option>
                                         <option value={30}>30 minutes</option>
@@ -281,13 +281,13 @@ export function PostComposer({ onPostCreated, replyToId, replyToPost, quotePost 
 
                         <Separator className="my-4" />
 
-                        <div className="flex justify-between items-center">
+                        <div className="flex items-center justify-between gap-3">
                             <div className="flex items-center gap-2">
                                 <Button
                                     type="button"
                                     variant="ghost"
                                     size="sm"
-                                    className="text-blue-500 hover:text-blue-600"
+                                    className="text-primary hover:text-primary"
                                     onClick={() => document.getElementById('media-upload')?.click()}
                                 >
                                     <Image className="h-5 w-5" />
@@ -304,14 +304,14 @@ export function PostComposer({ onPostCreated, replyToId, replyToPost, quotePost 
                                     type="button"
                                     variant="ghost"
                                     size="sm"
-                                    className={`${showPoll ? 'text-blue-500' : 'text-blue-500 hover:text-blue-600'}`}
+                                    className={showPoll ? 'text-primary' : 'text-primary hover:text-primary'}
                                     onClick={() => setShowPoll(!showPoll)}
                                     disabled={!!localQuotePost}
                                 >
                                     <BarChart3 className="h-5 w-5" />
                                 </Button>
                             </div>
-                            <div className="flex items-center gap-4">
+                            <div className="flex items-center gap-3">
                                 <span className={`text-sm ${charCount > 260 ? 'text-yellow-500' : 'text-muted-foreground'}`}>
                                     {charCount}/280
                                 </span>

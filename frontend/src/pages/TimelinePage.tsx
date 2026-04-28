@@ -35,7 +35,7 @@ export function TimelinePage() {
     };
 
     return (
-        <div className="max-w-2xl mx-auto p-4">
+        <div className="mx-auto max-w-2xl px-4 py-6 sm:py-8">
             <PostComposer onPostCreated={handlePostCreated} />
             
             {isLoading ? (
@@ -47,7 +47,7 @@ export function TimelinePage() {
                     No posts yet. Be the first to post!
                 </div>
             ) : (
-                <div className="space-y-4">
+                <div className="space-y-3">
                     {posts.map(post => (
                         <PostCard 
                             key={post.id} 

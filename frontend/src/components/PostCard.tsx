@@ -202,11 +202,11 @@ export function PostCard({ post, onUpdate, onDelete }: PostCardProps) {
     const mediaUrls = localPost.media_urls ? localPost.media_urls.split(',') : [];
 
     return (
-        <Card className={localPost.is_pinned ? 'border-blue-500 border-2' : ''}>
-            <CardContent className="pt-6">
+        <Card className={localPost.is_pinned ? 'border-primary border-2' : 'border-border/80'}>
+            <CardContent className="p-4 sm:p-5">
                 {/* Pinned indicator */}
                 {localPost.is_pinned && (
-                    <div className="flex items-center gap-2 text-blue-500 text-sm mb-2 ml-14">
+                    <div className="mb-2 ml-14 flex items-center gap-2 text-sm text-primary">
                         <Pin className="h-3 w-3" />
                         <span className="font-medium">Pinned post</span>
                     </div>
@@ -214,7 +214,7 @@ export function PostCard({ post, onUpdate, onDelete }: PostCardProps) {
 
                 {/* Reply indicator */}
                 {localPost.reply_to_id && (
-                    <div className="flex items-center gap-2 text-muted-foreground text-sm mb-2 ml-14">
+                    <div className="mb-2 ml-14 flex items-center gap-2 text-sm text-muted-foreground">
                         <MessageCircle className="h-3 w-3" />
                         <span>Replying to a post</span>
                     </div>
@@ -222,16 +222,16 @@ export function PostCard({ post, onUpdate, onDelete }: PostCardProps) {
 
                 <div className="flex items-start gap-3">
                     <Link to={`/profile/${localPost.username}`}>
-                        <Avatar className="h-12 w-12">
+                        <Avatar className="h-11 w-11 ring-2 ring-background">
                             <AvatarImage src={localPost.avatar_url || undefined} alt={localPost.username} />
                             <AvatarFallback>{initials}</AvatarFallback>
                         </Avatar>
                     </Link>
                     <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between mb-1">
-                            <div className="flex items-center gap-2 flex-wrap">
+                        <div className="mb-1 flex items-start justify-between gap-3">
+                            <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
                                 <Link to={`/profile/${localPost.username}`}>
-                                    <span className="font-semibold truncate hover:underline">{displayName}</span>
+                                    <span className="font-semibold hover:underline">{displayName}</span>
                                 </Link>
                                 <span className="text-muted-foreground text-sm">@{localPost.username}</span>
                                 <span className="text-muted-foreground text-xs">·</span>
@@ -242,7 +242,7 @@ export function PostCard({ post, onUpdate, onDelete }: PostCardProps) {
                                     <Button
                                         variant="ghost"
                                         size="sm"
-                                        className={`h-8 w-8 p-0 ${localPost.is_pinned ? 'text-blue-500' : ''}`}
+                                        className={`h-8 w-8 p-0 ${localPost.is_pinned ? 'text-primary' : ''}`}
                                         onClick={handlePin}
                                         title={localPost.is_pinned ? 'Unpin from profile' : 'Pin to profile'}
                                     >
@@ -261,15 +261,15 @@ export function PostCard({ post, onUpdate, onDelete }: PostCardProps) {
                             )}
                         </div>
 
-                        <p className="text-foreground whitespace-pre-wrap break-words mb-3">
+                        <p className="mb-3 whitespace-pre-wrap break-words leading-relaxed text-foreground">
                             {localPost.content}
                         </p>
 
                         {/* Media display */}
                         {mediaUrls.length > 0 && (
-                            <div className={`grid gap-2 mb-3 ${mediaUrls.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                            <div className={`mb-3 grid gap-2 ${mediaUrls.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
                                 {mediaUrls.map((url, idx) => (
-                                    <div key={idx} className="relative rounded-lg overflow-hidden bg-muted">
+                                    <div key={idx} className="relative overflow-hidden rounded-lg border bg-muted">
                                         {url.match(/\.(jpg|jpeg|png|gif|webp)$/i) ? (
                                             <img
                                                 src={url}
@@ -286,7 +286,7 @@ export function PostCard({ post, onUpdate, onDelete }: PostCardProps) {
                                         ) : url && isSafeUrl(url) ? (
                                             <div className="flex items-center gap-2 p-4">
                                                 <Image className="h-5 w-5" />
-                                                <a href={url} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">
+                                                <a href={url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
                                                     View media
                                                 </a>
                                             </div>
@@ -298,7 +298,7 @@ export function PostCard({ post, onUpdate, onDelete }: PostCardProps) {
 
                         {/* Quote post display */}
                         {localPost.quote_to_post && (
-                            <div className="border rounded-lg p-3 mb-3 bg-muted/50">
+                            <div className="mb-3 rounded-lg border bg-muted/50 p-3">
                                 <div className="flex items-center gap-2 mb-2">
                                     <Avatar className="h-5 w-5">
                                         <AvatarImage src={localPost.quote_to_post.avatar_url || undefined} />
@@ -331,7 +331,7 @@ export function PostCard({ post, onUpdate, onDelete }: PostCardProps) {
                                             className={`
                                                 relative overflow-hidden rounded-lg border p-3 cursor-pointer transition-colors
                                                 ${localPost.poll!.has_voted ? 'cursor-default' : 'hover:bg-muted'}
-                                                ${isSelected ? 'border-blue-500 bg-blue-50' : ''}
+                                                ${isSelected ? 'border-primary bg-accent' : ''}
                                             `}
                                         >
                                             {localPost.poll!.has_voted && (
@@ -362,8 +362,8 @@ export function PostCard({ post, onUpdate, onDelete }: PostCardProps) {
                         )}
 
                         {/* Action buttons */}
-                        <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-1 sm:gap-4">
+                        <div className="flex items-center justify-between gap-3 border-t pt-2">
+                            <div className="flex min-w-0 items-center gap-1 sm:gap-3">
                                 <Button
                                     variant="ghost"
                                     size="sm"
@@ -410,11 +410,11 @@ export function PostCard({ post, onUpdate, onDelete }: PostCardProps) {
                                 />
                             </div>
 
-                            <div className="flex items-center gap-1 sm:gap-4">
+                            <div className="flex items-center gap-1 sm:gap-3">
                                 <Button
                                     variant="ghost"
                                     size="sm"
-                                    className={`gap-2 ${localPost.is_bookmarked ? 'text-blue-500 hover:text-blue-600' : ''}`}
+                                    className={`gap-2 ${localPost.is_bookmarked ? 'text-primary hover:text-primary' : ''}`}
                                     onClick={handleBookmark}
                                 >
                                     <Bookmark className={`h-4 w-4 ${localPost.is_bookmarked ? 'fill-current' : ''}`} />
